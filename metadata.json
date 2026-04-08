@@ -1,0 +1,8 @@
+{
+  "name": "E-Quran Academy",
+  "description": "A comprehensive online platform for Quranic education, connecting students with certified tutors worldwide.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Lexend", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #11d473;
+  --color-background-light: #f6f8f7;
+  --color-background-dark: #102219;
+}
+
+html, body {
+  height: 100%;
+  overflow: auto;
+}
+
+body {
+  font-family: var(--font-display);
+  overflow-y: auto;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.filled-icon {
+  font-variation-settings: 'FILL' 1;
+}
