@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Filter, Star, Clock, BookOpen, Users, CheckCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, Filter, Star, Clock, BookOpen, Users, CheckCircle, Loader2 } from 'lucide-react';
 import { Sidebar, DashboardHeader } from '../components/Dashboard';
 import { useToast } from '../contexts/ToastContext';
+import { getTeachers } from '../api';
 
 interface Teacher {
   id: number;
@@ -14,66 +15,39 @@ interface Teacher {
   languages: string[];
 }
 
-const teachers: Teacher[] = [
-  {
-    id: 1,
-    name: 'Sheikh Abdullah',
-    subject: 'Tajweed',
-    availability: 'Mon-Fri, 9AM-5PM',
-    rating: 4.8,
-    avatar: 'https://picsum.photos/seed/teacher1/100/100',
-    experience: '10 years',
-    languages: ['Arabic', 'English']
-  },
-  {
-    id: 2,
-    name: 'Sheikh Rashid',
-    subject: 'Quranic Recitation',
-    availability: 'Tue-Sat, 10AM-6PM',
-    rating: 4.9,
-    avatar: 'https://picsum.photos/seed/teacher2/100/100',
-    experience: '8 years',
-    languages: ['Arabic', 'Urdu']
-  },
-  {
-    id: 3,
-    name: 'Ustazah Fatima',
-    subject: 'Islamic Studies',
-    availability: 'Mon-Wed, 2PM-8PM',
-    rating: 4.7,
-    avatar: 'https://picsum.photos/seed/teacher3/100/100',
-    experience: '12 years',
-    languages: ['Arabic', 'English', 'Malay']
-  },
-  {
-    id: 4,
-    name: 'Sheikh Ahmed',
-    subject: 'Hadith',
-    availability: 'Thu-Sun, 11AM-7PM',
-    rating: 4.6,
-    avatar: 'https://picsum.photos/seed/teacher4/100/100',
-    experience: '15 years',
-    languages: ['Arabic', 'English']
-  },
-  {
-    id: 5,
-    name: 'Ustazah Aisha',
-    subject: 'Fiqh',
-    availability: 'Mon-Fri, 1PM-9PM',
-    rating: 4.8,
-    avatar: 'https://picsum.photos/seed/teacher5/100/100',
-    experience: '9 years',
-    languages: ['Arabic', 'English', 'French']
-  }
-];
-
 export const FindTeacher = () => {
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [selectedAvailability, setSelectedAvailability] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'experience'>('rating');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const data = await getTeachers();
+        const mapped = (data.teachers || data || []).map((t: any) => ({
+          id: t.id || t.user_id,
+          name: t.full_name || t.name,
+          subject: t.subject || 'Quran',
+          availability: t.availability || 'Contact for schedule',
+          rating: t.rating || 4.5,
+          avatar: t.profile_image || `https://picsum.photos/seed/teacher${t.id}/100/100`,
+          experience: t.years_experience ? `${t.years_experience} years` : 'Experienced',
+          languages: ['Arabic', 'English']
+        }));
+        setTeachers(mapped);
+      } catch (err: any) {
+        addToast('error', 'Failed to load teachers', err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTeachers();
+  }, []);
 
   const subjects = ['all', ...Array.from(new Set(teachers.map(t => t.subject)))];
   const availabilities = ['all', 'weekdays', 'weekends', 'evenings'];
@@ -98,7 +72,7 @@ export const FindTeacher = () => {
     });
 
     return filtered;
-  }, [searchQuery, selectedSubject, selectedAvailability, sortBy]);
+  }, [teachers, searchQuery, selectedSubject, selectedAvailability, sortBy]);
 
   const handleSelectTeacher = (teacher: Teacher) => {
     setSelectedTeacher(teacher);

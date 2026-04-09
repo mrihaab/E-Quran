@@ -187,7 +187,7 @@ export const Footer = () => {
                 // Handle newsletter subscription
                 console.log('Newsletter subscription:', values);
                 resetForm();
-                alert('Thank you for subscribing!');
+                // Subscription successful
               }}
             >
               {({ isSubmitting }) => (

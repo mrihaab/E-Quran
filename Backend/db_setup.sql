@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS payments (
   payer_id INT NOT NULL,
   payee_id INT NOT NULL,
   amount DECIMAL(10, 2) NOT NULL,
-  payment_method ENUM('Credit Card', 'Bank Transfer', 'Wallet') DEFAULT 'Credit Card',
+  payment_method ENUM('Credit Card', 'Bank Transfer', 'Wallet', 'JazzCash', 'EasyPaisa') DEFAULT 'Bank Transfer',
   notes TEXT,
   status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'completed',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -186,17 +186,17 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Admin account (password: admin123 — hashed with bcrypt)
 -- The hash below corresponds to 'admin123'
 INSERT INTO users (full_name, email, password_hash, phone, role, gender, status, profile_image) VALUES
-('Super Admin', 'admin@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 000 000 0000', 'admin', 'male', 'active', 'https://picsum.photos/seed/admin/100/100');
+('Super Admin', 'admin@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 000 000 0000', 'admin', 'male', 'active', 'https://picsum.photos/seed/admin/100/100');
 
 INSERT INTO admins (user_id, admin_id, role_position, department, access_level, office_address) VALUES
 (1, 'ADM001', 'Super Admin', 'IT', 'full', 'E-Quran Academy HQ');
 
 -- Sample Teachers
 INSERT INTO users (full_name, email, password_hash, phone, role, gender, status, profile_image) VALUES
-('Sheikh Ahmed Al-Mansouri', 'ahmed.teacher@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 111 111 1111', 'teacher', 'male', 'active', 'https://picsum.photos/seed/teacher1/100/100'),
-('Ustazah Fatima Khan', 'fatima.teacher@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 222 222 2222', 'teacher', 'female', 'active', 'https://picsum.photos/seed/teacher2/100/100'),
-('Sheikh Rashid Al-Makki', 'rashid.teacher@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 333 333 3333', 'teacher', 'male', 'active', 'https://picsum.photos/seed/teacher3/100/100'),
-('Ustazah Aisha Mohamed', 'aisha.teacher@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 444 444 4444', 'teacher', 'female', 'active', 'https://picsum.photos/seed/teacher4/100/100');
+('Sheikh Ahmed Al-Mansouri', 'ahmed.teacher@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 111 111 1111', 'teacher', 'male', 'active', 'https://picsum.photos/seed/teacher1/100/100'),
+('Ustazah Fatima Khan', 'fatima.teacher@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 222 222 2222', 'teacher', 'female', 'active', 'https://picsum.photos/seed/teacher2/100/100'),
+('Sheikh Rashid Al-Makki', 'rashid.teacher@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 333 333 3333', 'teacher', 'male', 'active', 'https://picsum.photos/seed/teacher3/100/100'),
+('Ustazah Aisha Mohamed', 'aisha.teacher@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 444 444 4444', 'teacher', 'female', 'active', 'https://picsum.photos/seed/teacher4/100/100');
 
 INSERT INTO teachers (user_id, teacher_id, qualification, subject, years_experience, salary, rating, expertise, availability, languages) VALUES
 (2, 'TEA001', 'PhD in Tajweed Sciences', 'Tajweed', 15, 5000.00, 4.80, 'Tajweed & Qira''at', 'Mon-Fri, 9AM-5PM', 'Arabic, English'),
@@ -206,14 +206,14 @@ INSERT INTO teachers (user_id, teacher_id, qualification, subject, years_experie
 
 -- Sample Student
 INSERT INTO users (full_name, email, password_hash, phone, role, gender, status, profile_image) VALUES
-('Ahmed Khan', 'student@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 555 555 5555', 'student', 'male', 'active', 'https://picsum.photos/seed/ahmed/100/100');
+('Ahmed Khan', 'student@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 555 555 5555', 'student', 'male', 'active', 'https://picsum.photos/seed/ahmed/100/100');
 
 INSERT INTO students (user_id, student_id, date_of_birth, course, enrollment_year, level) VALUES
 (6, 'STU001', '2000-05-15', 'Tajweed Mastery', 2024, 'Intermediate');
 
 -- Sample Parent
 INSERT INTO users (full_name, email, password_hash, phone, role, gender, status, profile_image) VALUES
-('Omar Khalid', 'parent@equran.com', '$2a$10$xVqYLGEMBm3YNhALMYOWQeHpx06E9EvFns.gPyKTlQejFdbTqwLb2', '+1 666 666 6666', 'parent', 'male', 'active', 'https://picsum.photos/seed/parent/100/100');
+('Omar Khalid', 'parent@equran.com', '$2a$10$8J7Nl8UOz9EKD4A08VoGtO1CriWJQDDWRexqrO41b.dRCJNYlrQjq', '+1 666 666 6666', 'parent', 'male', 'active', 'https://picsum.photos/seed/parent/100/100');
 
 INSERT INTO parents (user_id, parent_id, child_name, relationship, child_class) VALUES
 (7, 'PAR001', 'Hassan Omar', 'father', 'Grade 5');

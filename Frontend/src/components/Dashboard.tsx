@@ -246,7 +246,7 @@ export const StudentDashboard = () => {
                 { icon: Calendar, label: "Schedule Class", color: "blue", action: () => handleNavigate('student-classes') },
                 { icon: Users, label: "Find Teachers", color: "green", action: () => handleNavigate('teachers') },
                 { icon: FileText, label: "View Progress", color: "purple", action: () => handleNavigate('student-settings') },
-                { icon: Zap, label: "Take Quiz", color: "amber", action: () => alert('Quiz feature coming soon!') }
+                { icon: Zap, label: "Take Quiz", color: "amber", action: () => handleNavigate('courses') }
               ].map((action, i) => (
                 <button key={i} onClick={action.action} className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200">
                   <div className={`size-8 rounded-lg flex items-center justify-center ${

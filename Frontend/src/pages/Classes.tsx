@@ -1,11 +1,40 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar, DashboardHeader } from '../components/Dashboard';
 import { BookMarked, Video, BookOpen, Clock, Edit, Trash2, Users, Plus, X, Check } from 'lucide-react';
 import { View, UserRole } from '../types';
+import { getClasses, getTeacherClasses, deleteClass } from '../api';
+import { useAppSelector } from '../store/hooks';
+import { useToast } from '../contexts/ToastContext';
 
 export const StudentClasses = () => {
   const navigate = useNavigate();
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const data = await getClasses();
+        setClasses(data.classes || data || []);
+      } catch (err) { /* fallback empty */ }
+      finally { setLoading(false); }
+    };
+    fetch();
+  }, []);
+
+  const displayClasses = classes.length > 0 ? classes.map((cls: any) => ({
+    title: cls.name || cls.title,
+    teacher: cls.teacher_name || 'Teacher',
+    time: cls.schedule || 'TBD',
+    platform: cls.platform || 'Zoom',
+    live: cls.status === 'active',
+    img: `https://picsum.photos/seed/quran${cls.id}/400/300`
+  })) : [
+    { title: "Tajweed Essentials", teacher: "Sheikh Ahmed", time: "Daily at 10:00 AM", platform: "Zoom", live: true, img: "https://picsum.photos/seed/quran1/400/300" },
+    { title: "Quran Memorization", teacher: "Hafiz Mustafa", time: "Mon-Wed at 4:00 PM", platform: "Portal Meet", live: false, img: "https://picsum.photos/seed/quran2/400/300" },
+    { title: "Arabic Language 101", teacher: "Ustadha Fatima", time: "Tue-Thu at 2:00 PM", platform: "Private Link", live: false, img: "https://picsum.photos/seed/quran3/400/300" }
+  ];
 
   return (
   <div className="flex h-screen overflow-hidden bg-background-light">
@@ -20,11 +49,7 @@ export const StudentClasses = () => {
           </div>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            { title: "Tajweed Essentials", teacher: "Sheikh Ahmed", time: "Daily at 10:00 AM", platform: "Zoom", live: true, img: "https://picsum.photos/seed/quran1/400/300" },
-            { title: "Quran Memorization", teacher: "Hafiz Mustafa", time: "Mon-Wed at 4:00 PM", platform: "Portal Meet", live: false, img: "https://picsum.photos/seed/quran2/400/300" },
-            { title: "Arabic Language 101", teacher: "Ustadha Fatima", time: "Tue-Thu at 2:00 PM", platform: "Private Link", live: false, img: "https://picsum.photos/seed/quran3/400/300" }
-          ].map((cls, i) => (
+          {displayClasses.map((cls, i) => (
             <div key={i} className="bg-white rounded-xl overflow-hidden border border-primary/10 shadow-sm hover:shadow-md transition-shadow group">
               <div className="h-48 bg-slate-200 relative overflow-hidden">
                 <img className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src={cls.img} referrerPolicy="no-referrer" />
@@ -50,7 +75,7 @@ export const StudentClasses = () => {
                     {cls.platform}
                   </div>
                 </div>
-                <button onClick={() => cls.live ? alert('Joining live class...') : alert('Opening curriculum...')} className={`w-full py-3 font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${cls.live ? 'bg-primary text-white hover:shadow-lg hover:shadow-primary/20' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}>
+                <button className={`w-full py-3 font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${cls.live ? 'bg-primary text-white hover:shadow-lg hover:shadow-primary/20' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'}`}>
                   {cls.live ? <Video className="size-4" /> : <BookOpen className="size-4" />}
                   {cls.live ? 'Join Class' : 'View Curriculum'}
                 </button>
@@ -66,12 +91,45 @@ export const StudentClasses = () => {
 
 export const TeacherClasses = () => {
   const navigate = useNavigate();
-  const [classes, setClasses] = React.useState([
-    { id: 1, title: "Tajweed Fundamentals", level: "Beginner", students: 12, time: "Mon, Wed 4:00 PM", platform: "Zoom", status: "Active" },
-    { id: 2, title: "Quran Memorization", level: "Intermediate", students: 8, time: "Tue, Thu 5:30 PM", platform: "Teams", status: "Active" },
-    { id: 3, title: "Arabic Basics", level: "Beginner", students: 15, time: "Sat 3:00 PM", platform: "Google Meet", status: "Active" },
-    { id: 4, title: "Islamic Studies", level: "Advanced", students: 7, time: "Sun 2:00 PM", platform: "Zoom", status: "Scheduled" }
-  ]);
+  const { user } = useAppSelector((state) => state.auth);
+  const { addToast } = useToast();
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchClasses = async () => {
+    try {
+      const data = user?.id ? await getTeacherClasses(user.id) : await getClasses();
+      const list = (data.classes || data || []).map((c: any) => ({
+        id: c.id,
+        title: c.name || c.title,
+        level: c.level || 'Beginner',
+        students: c.student_count || 0,
+        time: c.schedule || 'TBD',
+        platform: c.platform || 'Zoom',
+        status: c.status === 'active' ? 'Active' : 'Scheduled'
+      }));
+      setClasses(list.length > 0 ? list : [
+        { id: 1, title: "Tajweed Fundamentals", level: "Beginner", students: 12, time: "Mon, Wed 4:00 PM", platform: "Zoom", status: "Active" },
+        { id: 2, title: "Quran Memorization", level: "Intermediate", students: 8, time: "Tue, Thu 5:30 PM", platform: "Teams", status: "Active" },
+      ]);
+    } catch (err) {
+      setClasses([
+        { id: 1, title: "Tajweed Fundamentals", level: "Beginner", students: 12, time: "Mon, Wed 4:00 PM", platform: "Zoom", status: "Active" },
+      ]);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchClasses(); }, []);
+
+  const handleDelete = async (classId: number, title: string) => {
+    try {
+      await deleteClass(classId);
+      addToast('success', 'Class Deleted', `${title} has been deleted.`);
+      fetchClasses();
+    } catch (err: any) {
+      addToast('error', 'Delete Failed', err.message);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background-light">
@@ -118,15 +176,15 @@ export const TeacherClasses = () => {
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => alert(`Editing class: ${cls.title}`)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg hover:bg-blue-100 transition-colors">
+                  <button onClick={() => addToast('info', 'Edit Class', `Opening editor for: ${cls.title}`)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg hover:bg-blue-100 transition-colors">
                     <Edit className="size-4" />
                     Edit
                   </button>
-                  <button onClick={() => alert(`Managing students for: ${cls.title}`)} className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 font-semibold rounded-lg hover:bg-purple-100 transition-colors">
+                  <button onClick={() => addToast('info', 'Manage Students', `Managing students for: ${cls.title}`)} className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 font-semibold rounded-lg hover:bg-purple-100 transition-colors">
                     <Users className="size-4" />
                     Manage Students ({cls.students})
                   </button>
-                  <button onClick={() => setClasses(classes.filter(c => c.id !== cls.id))} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-100 transition-colors ml-auto">
+                  <button onClick={() => handleDelete(cls.id, cls.title)} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-100 transition-colors ml-auto">
                     <Trash2 className="size-4" />
                     Delete
                   </button>

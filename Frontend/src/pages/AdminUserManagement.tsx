@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -19,74 +19,57 @@ import {
 } from 'lucide-react';
 import { Sidebar, DashboardHeader } from '../components/Dashboard';
 import { View, UserRole } from '../types';
-
-// Mock user data
-const users = [
-  {
-    id: 1,
-    name: 'Ahmed Hassan',
-    email: 'ahmed.hassan@email.com',
-    role: 'student',
-    status: 'active',
-    joinDate: '2024-01-15',
-    lastActive: '2024-04-01',
-    avatar: 'https://picsum.photos/seed/user1/40/40'
-  },
-  {
-    id: 2,
-    name: 'Fatima Ali',
-    email: 'fatima.ali@email.com',
-    role: 'teacher',
-    status: 'active',
-    joinDate: '2023-11-20',
-    lastActive: '2024-04-02',
-    avatar: 'https://picsum.photos/seed/user2/40/40'
-  },
-  {
-    id: 3,
-    name: 'Omar Khalid',
-    email: 'omar.khalid@email.com',
-    role: 'parent',
-    status: 'active',
-    joinDate: '2024-02-10',
-    lastActive: '2024-03-28',
-    avatar: 'https://picsum.photos/seed/user3/40/40'
-  },
-  {
-    id: 4,
-    name: 'Aisha Rahman',
-    email: 'aisha.rahman@email.com',
-    role: 'student',
-    status: 'inactive',
-    joinDate: '2024-03-01',
-    lastActive: '2024-03-15',
-    avatar: 'https://picsum.photos/seed/user4/40/40'
-  },
-  {
-    id: 5,
-    name: 'Admin User',
-    email: 'admin@equran.com',
-    role: 'admin',
-    status: 'active',
-    joinDate: '2023-01-01',
-    lastActive: '2024-04-05',
-    avatar: 'https://picsum.photos/seed/admin/40/40'
-  }
-];
+import { getAdminUsers, deleteAdminUser } from '../api';
+import { useToast } from '../contexts/ToastContext';
 
 export const AdminUserManagement = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast();
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher' | 'parent' | 'admin'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+  const fetchUsers = async () => {
+    try {
+      const params: any = {};
+      if (searchTerm) params.search = searchTerm;
+      if (roleFilter !== 'all') params.role = roleFilter;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const data = await getAdminUsers(params);
+      const mapped = (data.users || data || []).map((u: any) => ({
+        id: u.id,
+        name: u.full_name || u.name,
+        email: u.email,
+        role: u.role,
+        status: u.status || 'active',
+        joinDate: u.created_at || '2024-01-01',
+        lastActive: u.created_at || '2024-01-01',
+        avatar: u.profile_image || `https://picsum.photos/seed/user${u.id}/40/40`
+      }));
+      setUsers(mapped);
+    } catch (err: any) {
+      addToast('error', 'Failed to load users', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, [searchTerm, roleFilter, statusFilter]);
+
+  const handleDelete = async (userId: number, userName: string) => {
+    if (!confirm(`Are you sure you want to delete ${userName}?`)) return;
+    try {
+      await deleteAdminUser(userId);
+      addToast('success', 'User Deleted', `${userName} has been removed.`);
+      fetchUsers();
+    } catch (err: any) {
+      addToast('error', 'Delete Failed', err.message);
+    }
+  };
+
+  const filteredUsers = users;
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -171,7 +154,7 @@ export const AdminUserManagement = () => {
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
-                <button onClick={() => alert('Add new user feature coming soon!')} className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                <button onClick={() => addToast('info', 'Coming Soon', 'Add new user feature is coming soon!')} className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
                   Add New User
                 </button>
               </div>
@@ -225,13 +208,13 @@ export const AdminUserManagement = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => alert(`Edit user: ${user.name}`)} className="p-1 text-slate-400 hover:text-purple-600 transition-colors">
+                            <button onClick={() => addToast('info', 'Edit', `Editing ${user.name}...`)} className="p-1 text-slate-400 hover:text-purple-600 transition-colors">
                               <Edit className="size-4" />
                             </button>
-                            <button onClick={() => alert(`Delete user: ${user.name}?`)} className="p-1 text-slate-400 hover:text-red-600 transition-colors">
+                            <button onClick={() => handleDelete(user.id, user.name)} className="p-1 text-slate-400 hover:text-red-600 transition-colors">
                               <Trash2 className="size-4" />
                             </button>
-                            <button onClick={() => alert(`More options for: ${user.name}`)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+                            <button onClick={() => addToast('info', 'Options', `More options for ${user.name}`)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
                               <MoreVertical className="size-4" />
                             </button>
                           </div>

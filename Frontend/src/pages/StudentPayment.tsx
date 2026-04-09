@@ -4,19 +4,17 @@ import { Sidebar, DashboardHeader } from '../components/Dashboard';
 import { View, UserRole } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
+import { getTeachers, createPayment } from '../api';
+import { useAppSelector } from '../store/hooks';
 
-const teachers = [
-  { name: 'Sheikh Abdullah', subject: 'Tajweed', fee: 120, avatar: 'https://picsum.photos/seed/teacher1/100/100' },
-  { name: 'Sheikh Rashid', subject: 'Quranic Recitation', fee: 140, avatar: 'https://picsum.photos/seed/teacher2/100/100' },
-  { name: 'Ustazah Fatima', subject: 'Islamic Studies', fee: 110, avatar: 'https://picsum.photos/seed/teacher3/100/100' }
-];
-
-const paymentOptions = ['Credit Card', 'Bank Transfer', 'Wallet'];
+const paymentOptions = ['Bank Transfer', 'JazzCash', 'EasyPaisa'];
 
 export const StudentPayment = () => {
   const navigate = useNavigate();
-  const [selectedTeacherName, setSelectedTeacherName] = useState(teachers[0].name);
-  const [amount, setAmount] = useState(teachers[0].fee.toString());
+  const { user } = useAppSelector((state) => state.auth);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [selectedTeacherName, setSelectedTeacherName] = useState('');
+  const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0]);
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -24,27 +22,55 @@ export const StudentPayment = () => {
   const { addToast } = useToast();
 
   useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const data = await getTeachers();
+        const list = (data.teachers || data || []).map((t: any) => ({
+          id: t.id || t.user_id,
+          name: t.full_name || t.name,
+          subject: t.subject || 'Quran',
+          fee: 120,
+          avatar: t.profile_image || `https://picsum.photos/seed/teacher${t.id}/100/100`
+        }));
+        setTeachers(list);
+        if (list.length > 0) {
+          setSelectedTeacherName(list[0].name);
+          setAmount(list[0].fee.toString());
+        }
+      } catch (err) {
+        // Fallback to empty
+      }
+    };
+    fetchTeachers();
+  }, []);
+
+  useEffect(() => {
     const teacher = teachers.find((item) => item.name === selectedTeacherName);
-    if (teacher) {
-      setAmount(teacher.fee.toString());
-    }
-  }, [selectedTeacherName]);
+    if (teacher) setAmount(teacher.fee.toString());
+  }, [selectedTeacherName, teachers]);
 
-  const selectedTeacher = teachers.find((item) => item.name === selectedTeacherName) ?? teachers[0];
+  const selectedTeacher = teachers.find((item) => item.name === selectedTeacherName) ?? teachers[0] ?? { name: '', subject: '', fee: 0, avatar: '' };
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!amount || Number(amount) <= 0) {
       addToast('error', 'Invalid Amount', 'Please enter a valid payment amount.');
       return;
     }
-
     setIsProcessing(true);
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      await createPayment({
+        payeeId: selectedTeacher.id,
+        amount: Number(amount),
+        paymentMethod,
+        notes,
+      });
       setIsPaid(true);
       addToast('success', 'Payment Successful!', `$${amount} has been paid to ${selectedTeacherName}.`);
-    }, 2000);
+    } catch (err: any) {
+      addToast('error', 'Payment Failed', err.message || 'Could not process payment.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

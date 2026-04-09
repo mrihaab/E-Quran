@@ -19,7 +19,7 @@ router.post('/', verifyToken, async (req, res) => {
     const [result] = await db.query(
       `INSERT INTO payments (payer_id, payee_id, amount, payment_method, notes, status)
        VALUES (?, ?, ?, ?, ?, 'completed')`,
-      [req.user.id, payeeId, amount, paymentMethod || 'Credit Card', notes || null]
+      [req.user.id, payeeId, amount, paymentMethod || 'Bank Transfer', notes || null]
     );
 
     res.status(201).json({

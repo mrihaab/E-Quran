@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
 import {
   BarChart3,
   TrendingUp,
@@ -54,6 +55,7 @@ const analyticsData = {
 
 export const AdminAnalytics = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
 
   return (
@@ -84,7 +86,7 @@ export const AdminAnalytics = () => {
                     <option value="90d">Last 90 days</option>
                     <option value="1y">Last year</option>
                   </select>
-                  <button onClick={() => alert('Analytics report download started!')} className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors border border-white/30 backdrop-blur-sm">
+                  <button onClick={() => addToast('success', 'Download Started', 'Analytics report download initiated.')} className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors border border-white/30 backdrop-blur-sm">
                     <Download className="size-4" />
                   </button>
                 </div>

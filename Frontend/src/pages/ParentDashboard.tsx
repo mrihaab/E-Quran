@@ -172,8 +172,8 @@ export const ParentDashboard = () => {
               {[
                 { title: "Weekly Progress", desc: "All students on track", icon: "📈", action: () => navigate('/parent-reports') },
                 { title: "Attendance", desc: "98% attendance rate", icon: "✅", action: () => navigate('/parent-reports') },
-                { title: "Assignments", desc: "5 pending reviews", icon: "📝", action: () => alert('Assignments feature coming soon!') },
-                { title: "Achievements", desc: "2 achievements earned", icon: "🏆", action: () => alert('Achievements feature coming soon!') }
+                { title: "Assignments", desc: "5 pending reviews", icon: "📝", action: () => navigate('/parent-reports') },
+                { title: "Achievements", desc: "2 achievements earned", icon: "🏆", action: () => navigate('/parent-reports') }
               ].map((report, i) => (
                 <button key={i} onClick={report.action} className="w-full text-left p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
                   <div className="flex items-start gap-3">

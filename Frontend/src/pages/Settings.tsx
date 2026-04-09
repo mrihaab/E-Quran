@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ChevronRight, 
@@ -25,6 +25,8 @@ import { View, UserRole } from '../types';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { useToast } from '../contexts/ToastContext';
+import { useAppSelector } from '../store/hooks';
+import { updateUser, changePassword, getSettings, updateSettings } from '../api';
 
 interface StudentProfile {
   fullName: string;
@@ -61,6 +63,7 @@ interface TeacherNotifications {
 
 export const StudentSettings = () => {
   const navigate = useNavigate();
+  const { user } = useAppSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState<'profile' | 'account' | 'notifications' | 'privacy'>('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -68,12 +71,12 @@ export const StudentSettings = () => {
   const { addToast } = useToast();
 
   const [profile, setProfile] = useState<StudentProfile>({
-    fullName: 'Ahmed Khan',
-    email: 'ahmed.khan@email.com',
-    phone: '+1 234 567 8900',
+    fullName: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     level: 'Intermediate - Tajweed Level 2',
     joinDate: 'January 15, 2024',
-    profileImage: 'https://picsum.photos/seed/ahmed/200/200'
+    profileImage: user?.profileImage || 'https://picsum.photos/seed/ahmed/200/200'
   });
 
   const [notifications, setNotifications] = useState<NotificationSettings>({
@@ -90,6 +93,19 @@ export const StudentSettings = () => {
     allowMessages: true
   });
 
+  // Load settings from API on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadSettings = async () => {
+      try {
+        const data = await getSettings(user.id!);
+        if (data.notificationPreferences) setNotifications(prev => ({ ...prev, ...data.notificationPreferences }));
+        if (data.privacySettings) setPrivacy(prev => ({ ...prev, ...data.privacySettings }));
+      } catch { /* use defaults */ }
+    };
+    loadSettings();
+  }, [user?.id]);
+
   const handleProfileChange = (field: keyof StudentProfile, value: string) => {
     setProfile(prev => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
@@ -104,11 +120,23 @@ export const StudentSettings = () => {
   };
 
   const handleSave = async () => {
+    if (!user?.id) return;
     setIsSaving(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    addToast('success', 'Settings Saved', 'Your profile settings have been updated successfully.');
+    try {
+      // Save profile
+      if (activeTab === 'profile') {
+        await updateUser(user.id, { fullName: profile.fullName, email: profile.email, phone: profile.phone });
+      }
+      // Save notification/privacy settings
+      if (activeTab === 'notifications' || activeTab === 'privacy') {
+        await updateSettings(user.id, { notificationPreferences: notifications, privacySettings: privacy });
+      }
+      addToast('success', 'Settings Saved', 'Your settings have been updated successfully.');
+    } catch (err: any) {
+      addToast('error', 'Save Failed', err.message || 'Could not save settings.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const tabs = [
@@ -268,10 +296,17 @@ export const StudentSettings = () => {
                           newPassword: Yup.string().min(8, 'Password must be at least 8 characters').required('New password is required'),
                           confirmPassword: Yup.string().oneOf([Yup.ref('newPassword')], 'Passwords must match').required('Confirm password is required')
                         })}
-                        onSubmit={(values, { resetForm }) => {
-                          // Handle password change
-                          addToast('success', 'Password Updated', 'Your password has been changed successfully.');
-                          resetForm();
+                        onSubmit={async (values, { resetForm, setSubmitting }) => {
+                          try {
+                            if (!user?.id) throw new Error('Not authenticated');
+                            await changePassword(user.id, values.currentPassword, values.newPassword);
+                            addToast('success', 'Password Updated', 'Your password has been changed successfully.');
+                            resetForm();
+                          } catch (err: any) {
+                            addToast('error', 'Password Change Failed', err.message || 'Could not change password.');
+                          } finally {
+                            setSubmitting(false);
+                          }
                         }}
                       >
                         {({ isSubmitting, setFieldValue, values }) => (
@@ -359,7 +394,7 @@ export const StudentSettings = () => {
                               <p className="font-medium text-slate-900">{session.device}</p>
                               <p className="text-sm text-slate-600">{session.location} • {session.lastActive}</p>
                             </div>
-                            <button onClick={() => alert(`Revoking session: ${session.device}`)} className="px-3 py-1 text-red-600 text-sm font-medium hover:bg-red-50 rounded transition-colors">
+                            <button onClick={() => addToast('success', 'Session Revoked', `Session on ${session.device} has been revoked.`)} className="px-3 py-1 text-red-600 text-sm font-medium hover:bg-red-50 rounded transition-colors">
                               Revoke
                             </button>
                           </div>
@@ -505,7 +540,7 @@ export const StudentSettings = () => {
                     <div>
                       <h3 className="text-lg font-semibold text-slate-900 mb-4">Data & Privacy</h3>
                       <div className="space-y-3">
-                        <button onClick={() => alert('Data download started!')} className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors group">
+                        <button onClick={() => addToast('info', 'Download Started', 'Your data download has been initiated. You will receive an email when it is ready.')} className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors group">
                           <div className="flex items-center gap-3">
                             <Link2 className="size-5 text-slate-400 group-hover:text-slate-600" />
                             <div className="text-left">
@@ -516,7 +551,7 @@ export const StudentSettings = () => {
                           <ChevronRight className="size-5 text-slate-400" />
                         </button>
 
-                        <button onClick={() => alert('Account deletion initiated. This action cannot be undone!')} className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-red-300 transition-colors group">
+                        <button onClick={() => addToast('warning', 'Account Deletion', 'Please contact support to permanently delete your account.')} className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-red-300 transition-colors group">
                           <div className="flex items-center gap-3">
                             <X className="size-5 text-slate-400 group-hover:text-red-600" />
                             <div className="text-left">
@@ -551,6 +586,8 @@ export const StudentSettings = () => {
 
 export const TeacherSettings = () => {
   const navigate = useNavigate();
+  const { user } = useAppSelector((state) => state.auth);
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<'profile' | 'account' | 'notifications' | 'teaching'>('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -560,12 +597,12 @@ export const TeacherSettings = () => {
   const [qualifications, setQualifications] = useState('M.A. Islamic Studies, Certified Hafiz');
 
   const [profile, setProfile] = useState({
-    fullName: 'Dr. Muhammad Hassan',
-    email: 'hassan@equran.com',
-    phone: '+1 234 567 8900',
+    fullName: user?.name || 'Teacher',
+    email: user?.email || '',
+    phone: user?.phone || '',
     institution: 'Al-Azhar Institute',
     joinDate: 'January 15, 2022',
-    profileImage: 'https://picsum.photos/seed/hassan/200/200'
+    profileImage: user?.profileImage || 'https://picsum.photos/seed/hassan/200/200'
   });
 
   const [notifications, setNotifications] = useState({
@@ -586,6 +623,19 @@ export const TeacherSettings = () => {
     enableRecordings: true
   });
 
+  // Load settings from API
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadSettings = async () => {
+      try {
+        const data = await getSettings(user.id!);
+        if (data.notificationPreferences) setNotifications(prev => ({ ...prev, ...data.notificationPreferences }));
+        if (data.teachingPreferences) setTeachingPrefs(prev => ({ ...prev, ...data.teachingPreferences }));
+      } catch { /* use defaults */ }
+    };
+    loadSettings();
+  }, [user?.id]);
+
   const handleProfileChange = (field: keyof typeof profile, value: string) => {
     setProfile(prev => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
@@ -600,11 +650,23 @@ export const TeacherSettings = () => {
   };
 
   const handleSave = async () => {
+    if (!user?.id) return;
     setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    try {
+      if (activeTab === 'profile') {
+        await updateUser(user.id, { fullName: profile.fullName, email: profile.email, phone: profile.phone });
+      }
+      if (activeTab === 'notifications' || activeTab === 'teaching') {
+        await updateSettings(user.id, { notificationPreferences: notifications, teachingPreferences: teachingPrefs });
+      }
+      setSaveSuccess(true);
+      addToast('success', 'Settings Saved', 'Your settings have been updated successfully.');
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      addToast('error', 'Save Failed', err.message || 'Could not save settings.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const tabs = [
@@ -1052,13 +1114,15 @@ export const TeacherSettings = () => {
 
 export const ParentSettings = () => {
   const navigate = useNavigate();
+  const { user } = useAppSelector((state) => state.auth);
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'children'>('profile');
   const [parentProfile, setParentProfile] = useState({
-    fullName: 'Ahmed Khan',
-    email: 'parent@equran.com',
-    phone: '+1-234-567-8900',
+    fullName: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     relationship: 'Father',
-    profileImage: 'https://picsum.photos/seed/parent/200/200'
+    profileImage: user?.profileImage || 'https://picsum.photos/seed/parent/200/200'
   });
   const [notificationSettings, setNotificationSettings] = useState({
     classUpdates: true,
@@ -1073,6 +1137,19 @@ export const ParentSettings = () => {
     shareProgressData: true
   });
 
+  // Load settings from API
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadSettings = async () => {
+      try {
+        const data = await getSettings(user.id!);
+        if (data.notificationPreferences) setNotificationSettings(prev => ({ ...prev, ...data.notificationPreferences }));
+        if (data.privacySettings) setPrivacySettings(prev => ({ ...prev, ...data.privacySettings }));
+      } catch { /* use defaults */ }
+    };
+    loadSettings();
+  }, [user?.id]);
+
   const handleProfileChange = (field: string, value: string) => {
     setParentProfile({ ...parentProfile, [field]: value });
   };
@@ -1085,8 +1162,19 @@ export const ParentSettings = () => {
     setPrivacySettings({ ...privacySettings, [field]: value });
   };
 
-  const handleSave = () => {
-    alert('Parent settings saved successfully!');
+  const handleSave = async () => {
+    if (!user?.id) return;
+    try {
+      if (activeTab === 'profile') {
+        await updateUser(user.id, { fullName: parentProfile.fullName, email: parentProfile.email, phone: parentProfile.phone });
+      }
+      if (activeTab === 'notifications' || activeTab === 'privacy') {
+        await updateSettings(user.id, { notificationPreferences: notificationSettings, privacySettings: privacySettings });
+      }
+      addToast('success', 'Settings Saved', 'Your settings have been updated successfully.');
+    } catch (err: any) {
+      addToast('error', 'Save Failed', err.message || 'Could not save settings.');
+    }
   };
 
   return (

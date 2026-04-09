@@ -18,9 +18,11 @@ import { Sidebar, DashboardHeader } from '../components/Dashboard';
 import { View, UserRole } from '../types';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
+import { useToast } from '../contexts/ToastContext';
 
 export const AdminSettings = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications' | 'payment' | 'system'>('general');
   const [settings, setSettings] = useState({
     siteName: 'E-Quran Academy',
@@ -38,8 +40,7 @@ export const AdminSettings = () => {
   });
 
   const handleSave = () => {
-    // Mock save functionality
-    alert('Settings saved successfully!');
+    addToast('success', 'Settings Saved', 'Platform settings have been updated successfully.');
   };
 
   const tabs = [
@@ -119,7 +120,7 @@ export const AdminSettings = () => {
                       })}
                       onSubmit={(values) => {
                         setSettings(prev => ({ ...prev, ...values }));
-                        alert('Settings saved successfully!');
+                        addToast('success', 'Settings Saved', 'General settings updated successfully.');
                       }}
                     >
                       {({ isSubmitting, setFieldValue, values }) => (
@@ -216,7 +217,7 @@ export const AdminSettings = () => {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-slate-600">Max 5 failed attempts before lockout</span>
-                          <button onClick={() => alert('Login attempts configuration opened!')} className="text-sm text-purple-600 hover:text-purple-700">Configure</button>
+                          <button onClick={() => addToast('info', 'Login Config', 'Login attempts configuration opened.')} className="text-sm text-purple-600 hover:text-purple-700">Configure</button>
                         </div>
                       </div>
                     </div>
@@ -325,11 +326,11 @@ export const AdminSettings = () => {
                       </div>
                     </div>
                     <div className="flex gap-4">
-                      <button onClick={() => alert('Backup process started!')} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                      <button onClick={() => addToast('success', 'Backup Started', 'System backup process has been initiated.')} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                         <RefreshCw className="size-4" />
                         Run Backup Now
                       </button>
-                      <button onClick={() => alert('Cache cleared successfully!')} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                      <button onClick={() => addToast('success', 'Cache Cleared', 'System cache has been cleared successfully.')} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                         <CheckCircle className="size-4" />
                         Clear Cache
                       </button>
@@ -340,7 +341,7 @@ export const AdminSettings = () => {
                 {/* Save Button */}
                 <div className="flex justify-end pt-6 border-t border-slate-200">
                   <button
-                    onClick={() => alert('All settings saved successfully!')}
+                    onClick={() => addToast('success', 'Settings Saved', 'All platform settings saved successfully.')}
                     className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                   >
                     <Save className="size-4" />
