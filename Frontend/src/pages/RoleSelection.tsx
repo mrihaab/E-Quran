@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Award, Users, ShieldCheck, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react';
-import { View, UserRole } from '../types';
-
-type Role = UserRole;
+import { UserRole } from '../types';
 
 export const RoleSelection = () => {
   const navigate = useNavigate();
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [searchParams] = useSearchParams();
+  const intent = searchParams.get('intent') || 'login'; // Defaults to login if not specified
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
   const roles = [
-    { id: 'student' as Role, icon: Award, title: "Student", desc: "Embark on your journey to learn the Quran with Tajweed and expert guidance.", next: 'register-student' as View },
-    { id: 'teacher' as Role, icon: Users, title: "Teacher", desc: "Share your knowledge, manage your classes, and inspire students worldwide.", next: 'register-teacher' as View },
-    { id: 'parent' as Role, icon: Users, title: "Parent", desc: "Monitor your children's progress, schedule classes, and stay updated.", next: 'register-parent' as View },
-    { id: 'admin' as Role, icon: ShieldCheck, title: "Admin", desc: "Access the administrative dashboard to oversee system operations.", next: 'register-admin' as View }
+    { id: 'student' as UserRole, icon: Award, title: "Student", desc: "Embark on your journey to learn the Quran with Tajweed and expert guidance." },
+    { id: 'teacher' as UserRole, icon: Users, title: "Teacher", desc: "Share your knowledge, manage your classes, and inspire students worldwide." },
+    { id: 'parent' as UserRole, icon: Users, title: "Parent", desc: "Monitor your children's progress, schedule classes, and stay updated." },
+    { id: 'admin' as UserRole, icon: ShieldCheck, title: "Admin", desc: "Access the administrative dashboard to oversee system operations." }
   ];
 
   return (
@@ -22,11 +22,15 @@ export const RoleSelection = () => {
       <div className="max-w-6xl w-full">
         <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-600 hover:text-primary transition-colors mb-6 sm:mb-8 text-sm font-semibold">
           <ArrowLeft className="size-4" />
-          Back
+          Back to Home
         </button>
         <div className="text-center mb-8 sm:mb-12">
-          <h1 className="text-slate-900 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight mb-3 sm:mb-4">Welcome to E-Quran Academy</h1>
-          <p className="text-slate-600 text-sm sm:text-base md:text-lg max-w-2xl mx-auto">Select your role to personalize your experience.</p>
+          <h1 className="text-slate-900 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight mb-3 sm:mb-4">
+            {intent === 'signup' ? 'Create an Account' : 'Welcome Back'}
+          </h1>
+          <p className="text-slate-600 text-sm sm:text-base md:text-lg max-w-2xl mx-auto">
+            Please select your role to continue to the {intent === 'signup' ? 'registration' : 'login'} portal.
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 mb-8 sm:mb-12">
           {roles.map(role => (
@@ -50,12 +54,13 @@ export const RoleSelection = () => {
           <button 
             disabled={!selectedRole}
             onClick={() => {
-              const role = roles.find(r => r.id === selectedRole);
-              if (role) navigate(`/${role.next}`);
+              if (selectedRole) {
+                navigate(`/auth/${selectedRole}?intent=${intent}`);
+              }
             }}
             className={`flex min-w-48 sm:min-w-60 items-center justify-center rounded-xl h-12 sm:h-14 px-6 sm:px-8 text-sm sm:text-lg font-bold transition-all ${selectedRole ? 'bg-primary text-white shadow-lg shadow-primary/20 cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
           >
-            <span>Proceed</span>
+            <span>Proceed to {intent === 'signup' ? 'Registration' : 'Login'}</span>
             <ArrowRight className="ml-2 size-4 sm:size-5" />
           </button>
         </div>

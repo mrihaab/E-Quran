@@ -3,8 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Navbar, Footer } from './components/Layout';
 import { LandingPage } from './pages/LandingPage';
 import { RoleSelection } from './pages/RoleSelection';
-import { Login } from './pages/Login';
-import { SignUp } from './pages/SignUp';
+import { AuthPage } from './pages/AuthPage';
 import { StudentDashboard } from './components/Dashboard';
 import { ParentDashboard } from './pages/ParentDashboard';
 import { TeacherDashboard as TeacherDashboardPage } from './pages/TeacherDashboard';
@@ -23,7 +22,7 @@ import { TeacherPayment } from './pages/TeacherPayment';
 import { ParentStudentPayment } from './pages/ParentStudentPayment';
 import { TeacherReceivePayment } from './pages/TeacherReceivePayment';
 import { FindTeacher } from './pages/FindTeacher';
-import { RegisterStudent, RegisterTeacher, RegisterParent, RegisterAdmin } from './pages/Registration';
+
 import { About } from './pages/About';
 import { Contact } from './pages/Contact';
 import { Courses } from './pages/Courses';
@@ -43,12 +42,15 @@ export default function App() {
         <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/role-selection" element={<RoleSelection />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/sign-up" element={<SignUp />} />
-            <Route path="/register-student" element={<RegisterStudent />} />
-            <Route path="/register-teacher" element={<RegisterTeacher />} />
-            <Route path="/register-parent" element={<RegisterParent />} />
-            <Route path="/register-admin" element={<RegisterAdmin />} />
+            <Route path="/auth/:role" element={<AuthPage />} />
+            
+            {/* Legacy Fallbacks */}
+            <Route path="/login" element={<Navigate to="/role-selection?intent=login" replace />} />
+            <Route path="/sign-up" element={<Navigate to="/role-selection?intent=signup" replace />} />
+            <Route path="/register-student" element={<Navigate to="/auth/student?intent=signup" replace />} />
+            <Route path="/register-teacher" element={<Navigate to="/auth/teacher?intent=signup" replace />} />
+            <Route path="/register-parent" element={<Navigate to="/auth/parent?intent=signup" replace />} />
+            <Route path="/register-admin" element={<Navigate to="/auth/admin?intent=signup" replace />} />
             <Route
               path="/student-dashboard"
               element={

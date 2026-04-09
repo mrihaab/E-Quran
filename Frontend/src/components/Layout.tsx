@@ -65,16 +65,12 @@ export const Navbar = () => {
         {/* Desktop Buttons */}
         <div className="hidden md:flex items-center gap-3">
           <button 
-            onClick={() => navigate('/login')} 
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-              isActive('/login')
-                ? 'bg-slate-200 text-slate-900'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
+            onClick={() => navigate('/role-selection?intent=login')} 
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 text-slate-700 hover:bg-slate-100`}
           >
             Sign In
           </button>
-          <button onClick={() => navigate('/role-selection')} className="rounded-full bg-primary px-4 sm:px-6 py-2 sm:py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+          <button onClick={() => navigate('/role-selection?intent=signup')} className="rounded-full bg-primary px-4 sm:px-6 py-2 sm:py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
             Sign Up
           </button>
         </div>
@@ -112,7 +108,7 @@ export const Navbar = () => {
           <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-200">
             <button 
               onClick={() => {
-                navigate('/login');
+                navigate('/role-selection?intent=login');
                 setIsMobileMenuOpen(false);
               }} 
               className="px-4 py-3 rounded-lg text-left text-base font-semibold text-slate-700 hover:bg-slate-100 transition-all"
@@ -121,7 +117,7 @@ export const Navbar = () => {
             </button>
             <button 
               onClick={() => {
-                navigate('/role-selection');
+                navigate('/role-selection?intent=signup');
                 setIsMobileMenuOpen(false);
               }} 
               className="px-4 py-3 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 transition-all"

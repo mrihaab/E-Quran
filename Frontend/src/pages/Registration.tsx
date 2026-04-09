@@ -100,7 +100,7 @@ async function handleRegisterSubmit(
   }
 }
 
-export const RegisterStudent = () => {
+export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
@@ -119,12 +119,7 @@ export const RegisterStudent = () => {
     enrollmentYear: Yup.number().required('Enrollment year is required'),
   });
 
-  return (
-    <FormWrapper 
-      title="Student Registration" 
-      subtitle="Join our community and start your Quranic journey today."
-      onBack={() => navigate('/role-selection')}
-    >
+  const formContent = (
       <Formik
         initialValues={{
           fullName: '',
@@ -188,11 +183,24 @@ export const RegisterStudent = () => {
           </Form>
         )}
       </Formik>
+  );
+
+  if (isEmbedded) {
+    return formContent;
+  }
+
+  return (
+    <FormWrapper 
+      title="Student Registration" 
+      subtitle="Join our community and start your Quranic journey today."
+      onBack={() => navigate('/role-selection')}
+    >
+      {formContent}
     </FormWrapper>
   );
 };
 
-export const RegisterTeacher = () => {
+export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
@@ -212,12 +220,7 @@ export const RegisterTeacher = () => {
     address: Yup.string().required('Address is required'),
   });
 
-  return (
-    <FormWrapper 
-      title="Teacher Registration" 
-      subtitle="Share your knowledge and inspire the next generation of scholars."
-      onBack={() => navigate('/role-selection')}
-    >
+  const formContent = (
       <Formik
         initialValues={{
           fullName: '',
@@ -296,11 +299,24 @@ export const RegisterTeacher = () => {
           </Form>
         )}
       </Formik>
+  );
+
+  if (isEmbedded) {
+    return formContent;
+  }
+
+  return (
+    <FormWrapper 
+      title="Teacher Registration" 
+      subtitle="Share your knowledge and inspire the next generation of scholars."
+      onBack={() => navigate('/role-selection')}
+    >
+      {formContent}
     </FormWrapper>
   );
 };
 
-export const RegisterParent = () => {
+export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
@@ -318,12 +334,7 @@ export const RegisterParent = () => {
     address: Yup.string().required('Address is required'),
   });
 
-  return (
-    <FormWrapper 
-      title="Parent Registration" 
-      subtitle="Manage your children's education and track their spiritual growth."
-      onBack={() => navigate('/role-selection')}
-    >
+  const formContent = (
       <Formik
         initialValues={{
           fullName: '',
@@ -386,11 +397,24 @@ export const RegisterParent = () => {
           </Form>
         )}
       </Formik>
+  );
+
+  if (isEmbedded) {
+    return formContent;
+  }
+
+  return (
+    <FormWrapper 
+      title="Parent Registration" 
+      subtitle="Manage your children's education and track their spiritual growth."
+      onBack={() => navigate('/role-selection')}
+    >
+      {formContent}
     </FormWrapper>
   );
 };
 
-export const RegisterAdmin = () => {
+export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
@@ -408,12 +432,7 @@ export const RegisterAdmin = () => {
     officeAddress: Yup.string().required('Office address is required'),
   });
 
-  return (
-    <FormWrapper 
-      title="Admin Registration" 
-      subtitle="Manage the platform and oversee operations."
-      onBack={() => navigate('/role-selection')}
-    >
+  const formContent = (
       <Formik
         initialValues={{
           fullName: '',
@@ -477,6 +496,19 @@ export const RegisterAdmin = () => {
           </Form>
         )}
       </Formik>
+  );
+
+  if (isEmbedded) {
+    return formContent;
+  }
+
+  return (
+    <FormWrapper 
+      title="Admin Registration" 
+      subtitle="Manage the platform and oversee operations."
+      onBack={() => navigate('/role-selection')}
+    >
+      {formContent}
     </FormWrapper>
   );
 };
