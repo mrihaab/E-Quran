@@ -185,9 +185,11 @@ CREATE TABLE IF NOT EXISTS payments (
   payment_method ENUM('Credit Card', 'Bank Transfer', 'Wallet', 'JazzCash', 'EasyPaisa') DEFAULT 'Bank Transfer',
   notes TEXT,
   status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'completed',
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (payer_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (payee_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (payee_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (is_deleted)
 );
 
 -- ==================== COURSES TABLE ====================
@@ -198,8 +200,10 @@ CREATE TABLE IF NOT EXISTS courses (
   level ENUM('Beginner', 'Intermediate', 'Advanced') DEFAULT 'Beginner',
   description TEXT,
   instructor_id INT,
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL
+  FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX (is_deleted)
 );
 
 -- ==================== CONTACT MESSAGES TABLE ====================
@@ -212,7 +216,9 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   message TEXT NOT NULL,
   status ENUM('new', 'read', 'replied') DEFAULT 'new',
   email_sent TINYINT(1) DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  is_deleted TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (is_deleted)
 );
 
 -- ==================== NOTIFICATIONS TABLE ====================
@@ -224,8 +230,10 @@ CREATE TABLE IF NOT EXISTS notifications (
   message TEXT,
   is_read TINYINT(1) DEFAULT 0,
   type ENUM('info', 'success', 'warning', 'error') DEFAULT 'info',
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (is_deleted)
 );
 
 -- ==================== SETTINGS TABLE ====================
@@ -236,8 +244,10 @@ CREATE TABLE IF NOT EXISTS settings (
   notification_preferences JSON,
   privacy_settings JSON,
   teaching_preferences JSON,
+  is_deleted TINYINT(1) DEFAULT 0,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (is_deleted)
 );
 
 -- ==================== REVIEWS TABLE ====================

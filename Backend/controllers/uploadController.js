@@ -1,12 +1,14 @@
 const db = require('../config/db');
+const { ApiError } = require('../middleware/errorMiddleware');
+const { sendResponse } = require('../utils/responseHandler');
 
 /**
  * Upload Profile Image
  */
-exports.uploadProfile = async (req, res) => {
+exports.uploadProfile = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
+      throw new ApiError(400, 'No file uploaded.');
     }
 
     const userId = req.user.id;
@@ -14,42 +16,31 @@ exports.uploadProfile = async (req, res) => {
 
     await db.query('UPDATE users SET profile_image = ? WHERE id = ?', [imageUrl, userId]);
 
-    res.json({
-      message: 'Profile image updated successfully.',
-      imageUrl
-    });
+    sendResponse(res, 200, { imageUrl }, 'Profile image updated successfully.');
   } catch (error) {
-    console.error('Upload profile error:', error);
-    res.status(500).json({ error: 'Failed to upload profile image.' });
+    next(error);
   }
 };
 
 /**
  * Upload Teacher Document
  */
-exports.uploadDocument = async (req, res) => {
+exports.uploadDocument = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
+      throw new ApiError(400, 'No file uploaded.');
     }
 
     // Only teachers can upload documents
     if (req.user.role !== 'teacher') {
-      return res.status(403).json({ error: 'Only teachers can upload certification documents.' });
+      throw new ApiError(403, 'Only teachers can upload certification documents.');
     }
 
     const userId = req.user.id;
     const docUrl = `/uploads/${req.file.filename}`;
 
-    // Update teacher qualification or a new documents column (currently using qualification as text)
-    // For now, let's just return the URL so the UI can handle it or we can add it to a 'documents' table if needed later.
-    
-    res.json({
-      message: 'Document uploaded successfully.',
-      documentUrl: docUrl
-    });
+    sendResponse(res, 200, { documentUrl: docUrl }, 'Document uploaded successfully.');
   } catch (error) {
-    console.error('Upload document error:', error);
-    res.status(500).json({ error: 'Failed to upload document.' });
+    next(error);
   }
 };
