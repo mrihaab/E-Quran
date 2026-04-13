@@ -17,9 +17,30 @@ CREATE TABLE IF NOT EXISTS users (
   gender ENUM('male', 'female', 'other'),
   address TEXT,
   status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+  is_verified TINYINT(1) DEFAULT 0,
+  is_deleted TINYINT(1) DEFAULT 0,
+  verification_token VARCHAR(255) DEFAULT NULL,
+  reset_token VARCHAR(255) DEFAULT NULL,
+  reset_token_expiry DATETIME DEFAULT NULL,
   profile_image VARCHAR(500) DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX (email),
+  INDEX (role),
+  INDEX (is_deleted)
+);
+
+-- ==================== REFRESH TOKENS TABLE ====================
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(500) NOT NULL UNIQUE,
+  device_info VARCHAR(255) DEFAULT NULL,
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (user_id),
+  INDEX (token)
 );
 
 -- ==================== ROLE-SPECIFIC TABLES ====================
@@ -84,8 +105,40 @@ CREATE TABLE IF NOT EXISTS classes (
   enrolled_count INT DEFAULT 0,
   platform VARCHAR(100) DEFAULT 'Zoom',
   status ENUM('Active', 'Scheduled', 'Completed', 'Cancelled') DEFAULT 'Active',
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (teacher_id),
+  INDEX (is_deleted)
+);
+
+-- ==================== COURSE CONTENT (MODULES & LESSONS) ====================
+
+CREATE TABLE IF NOT EXISTS modules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  class_id INT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  order_index INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  is_deleted TINYINT(1) DEFAULT 0,
+  FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+  INDEX (class_id),
+  INDEX (is_deleted)
+);
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  module_id INT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  content_type ENUM('video', 'document', 'quiz', 'text') DEFAULT 'text',
+  content_url VARCHAR(500),
+  description TEXT,
+  order_index INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  is_deleted TINYINT(1) DEFAULT 0,
+  FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE,
+  INDEX (module_id),
+  INDEX (is_deleted)
 );
 
 -- ==================== ENROLLMENTS TABLE ====================
@@ -95,10 +148,14 @@ CREATE TABLE IF NOT EXISTS enrollments (
   student_id INT NOT NULL,
   class_id INT NOT NULL,
   status ENUM('active', 'completed', 'dropped') DEFAULT 'active',
+  is_deleted TINYINT(1) DEFAULT 0,
   enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_enrollment (student_id, class_id)
+  UNIQUE KEY unique_enrollment (student_id, class_id),
+  INDEX (student_id),
+  INDEX (class_id),
+  INDEX (is_deleted)
 );
 
 -- ==================== MESSAGES TABLE ====================
@@ -109,9 +166,13 @@ CREATE TABLE IF NOT EXISTS messages (
   receiver_id INT NOT NULL,
   content TEXT NOT NULL,
   is_read TINYINT(1) DEFAULT 0,
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX (sender_id),
+  INDEX (receiver_id),
+  INDEX (is_deleted)
 );
 
 -- ==================== PAYMENTS TABLE ====================
@@ -177,6 +238,22 @@ CREATE TABLE IF NOT EXISTS settings (
   teaching_preferences JSON,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ==================== REVIEWS TABLE ====================
+CREATE TABLE IF NOT EXISTS reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  teacher_id INT NOT NULL,
+  student_id INT NOT NULL,
+  rating TINYINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  is_deleted TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_review (student_id, teacher_id),
+  INDEX (teacher_id),
+  INDEX (is_deleted)
 );
 
 -- ============================================================

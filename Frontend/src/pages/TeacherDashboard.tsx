@@ -11,11 +11,29 @@ import {
 } from '../components/Charts';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { logout } from '../store/authSlice';
+import { useEffect, useState } from 'react';
+import { getTeacherDashboardData } from '../api';
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const result = await getTeacherDashboardData();
+        setData(result);
+      } catch (err) {
+        console.error("Failed to fetch teacher dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
+  }, []);
 
   const handleNavigate = (view: string) => {
     navigate(`/${view}`);
@@ -23,7 +41,7 @@ export const TeacherDashboard = () => {
 
   const handleLogout = () => {
     dispatch(logout());
-    navigate('/login');
+    navigate('/');
   };
 
   return (
@@ -55,7 +73,7 @@ export const TeacherDashboard = () => {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Active Students</p>
-                <p className="text-2xl font-bold text-slate-900">28</p>
+                <p className="text-2xl font-bold text-slate-900">{loading ? '...' : data?.activeStudents || 0}</p>
                 <p className="text-xs text-green-600 font-medium">+3 this month</p>
               </div>
             </div>
@@ -68,7 +86,7 @@ export const TeacherDashboard = () => {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Classes This Week</p>
-                <p className="text-2xl font-bold text-slate-900">12</p>
+                <p className="text-2xl font-bold text-slate-900">{loading ? '...' : data?.classesThisWeek || 0}</p>
                 <p className="text-xs text-green-600 font-medium">All scheduled</p>
               </div>
             </div>
@@ -81,7 +99,7 @@ export const TeacherDashboard = () => {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Avg Performance</p>
-                <p className="text-2xl font-bold text-slate-900">87%</p>
+                <p className="text-2xl font-bold text-slate-900">{loading ? '...' : (data?.avgPerformance || 0) + '%'}</p>
                 <p className="text-xs text-green-600 font-medium">+5% this month</p>
               </div>
             </div>
@@ -106,14 +124,7 @@ export const TeacherDashboard = () => {
           {/* Class Performance Trends */}
           <ProgressLineChart
             title="📈 Class Performance Trends"
-            data={[
-              { name: 'Week 1', value: 82 },
-              { name: 'Week 2', value: 85 },
-              { name: 'Week 3', value: 87 },
-              { name: 'Week 4', value: 89 },
-              { name: 'Week 5', value: 86 },
-              { name: 'Week 6', value: 90 }
-            ]}
+            data={data?.performanceData || []}
             height={300}
             color="green"
           />
@@ -138,12 +149,7 @@ export const TeacherDashboard = () => {
           {/* Subject Distribution */}
           <DonutChart
             title="📚 Subject Teaching Distribution"
-            data={[
-              { name: 'Tajweed', value: 40 },
-              { name: 'Quran Recitation', value: 35 },
-              { name: 'Arabic Grammar', value: 15 },
-              { name: 'Islamic Studies', value: 10 }
-            ]}
+            data={data?.distribution || []}
             height={300}
             colors="green"
           />
@@ -187,12 +193,7 @@ export const TeacherDashboard = () => {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-4">📅 Upcoming Classes</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { time: "Today, 4:00 PM", class: "Tajweed Fundamentals", students: 8, level: "Intermediate" },
-              { time: "Tomorrow, 3:30 PM", class: "Quran Recitation", students: 6, level: "Advanced" },
-              { time: "Saturday, 2:00 PM", class: "Arabic Grammar", students: 10, level: "Beginner" },
-              { time: "Sunday, 1:00 PM", class: "Islamic Studies", students: 7, level: "Intermediate" }
-            ].map((session, i) => (
+            {(data?.upcomingClasses || []).map((session: any, i: number) => (
               <div key={i} className="p-4 rounded-lg border border-slate-200 hover:shadow-md transition-all">
                 <div className="flex justify-between items-start mb-2">
                   <p className="font-semibold text-slate-900">{session.class}</p>
@@ -202,6 +203,9 @@ export const TeacherDashboard = () => {
                 <p className="text-xs text-slate-500">👥 {session.students} students</p>
               </div>
             ))}
+            {(!loading && (!data?.upcomingClasses || data.upcomingClasses.length === 0)) && (
+              <p className="col-span-full text-center text-slate-500 py-8 italic font-medium">No upcoming classes scheduled yet.</p>
+            )}
           </div>
         </div>
       </div>

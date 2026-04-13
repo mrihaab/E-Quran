@@ -33,14 +33,21 @@ import {
 } from './Charts';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { logout } from '../store/authSlice';
+import { getStudentDashboardData } from '../api';
 
 export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { currentView: string, userRole?: UserRole, onLogout?: () => void }) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const dashboardView = userRole === 'teacher' ? 'teacher-dashboard' : userRole === 'parent' ? 'parent-dashboard' : userRole === 'admin' ? 'admin-dashboard' : 'student-dashboard';
   const classesView = userRole === 'teacher' ? 'teacher-classes' : 'student-classes';
   const messagesView = userRole === 'teacher' ? 'teacher-messages' : 'student-messages';
   const settingsView = userRole === 'teacher' ? 'teacher-settings' : userRole === 'parent' ? 'parent-settings' : 'student-settings';
   const paymentView = userRole === 'teacher' ? 'teacher-receive-payment' : userRole === 'parent' ? 'parent-payment' : 'student-payment';
+
+  const defaultLogout = () => {
+    dispatch(logout());
+    navigate('/');
+  };
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col">
@@ -116,7 +123,7 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
         )}
       </nav>
       <div className="p-4 border-t border-slate-200">
-        <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors font-medium">
+        <button onClick={onLogout || defaultLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors font-medium">
           <LogOut className="size-5" />
           <span className="text-sm">Logout</span>
         </button>
@@ -166,6 +173,22 @@ export const StudentDashboard = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await getStudentDashboardData();
+        setDashboardData(data);
+      } catch (err) {
+        console.error("Failed to fetch student dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleNavigate = (view: View) => {
     navigate(`/${view}`);
@@ -173,7 +196,7 @@ export const StudentDashboard = () => {
 
   const handleLogout = () => {
     dispatch(logout());
-    navigate('/login');
+    navigate('/');
   };
 
   return (
@@ -186,7 +209,11 @@ export const StudentDashboard = () => {
           <div className="bg-linear-to-r from-primary to-primary/80 rounded-2xl p-8 relative overflow-hidden shadow-xl shadow-primary/30">
             <div className="relative z-10 max-w-2xl">
               <h1 className="text-3xl font-bold text-white mb-2">Welcome, {user?.name || 'Student'}!</h1>
-            <p className="text-white/90 mt-3 text-lg">You're making excellent progress. Your next class starts in 2 hours!</p>
+            <p className="text-white/90 mt-3 text-lg">
+              {dashboardData?.nextClass 
+                ? `You're making excellent progress. Your next class "${dashboardData.nextClass.name}" is scheduled for ${dashboardData.nextClass.schedule}!`
+                : "You're making excellent progress. View your courses to join a classroom!"}
+            </p>
             <div className="flex gap-4 mt-6">
               <button onClick={() => handleNavigate('student-classes')} className="px-6 py-3 bg-white text-primary font-bold rounded-lg hover:bg-slate-50 transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
                 Join Classroom
@@ -202,10 +229,16 @@ export const StudentDashboard = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { label: "Next Class", val: "Today, 4:00 PM", icon: Clock, color: "blue", sub: "Starts in 2 hours" },
-            { label: "Attendance Rate", val: "95%", icon: CheckSquare, color: "green", progress: 95 },
-            { label: "Lessons Completed", val: "42", icon: Award, color: "purple", sub: "+3 this week" },
-            { label: "Current Level", val: "Intermediate", icon: TrendingUp, color: "amber", sub: "Tajweed Level 2" }
+            { 
+              label: "Next Class", 
+              val: dashboardData?.nextClass ? dashboardData.nextClass.schedule : "None Scheduled", 
+              icon: Clock, 
+              color: "blue", 
+              sub: dashboardData?.nextClass ? `with ${dashboardData.nextClass.teacher}` : "No upcoming classes" 
+            },
+            { label: "Attendance Rate", val: `${dashboardData?.attendance || 0}%`, icon: CheckSquare, color: "green", progress: dashboardData?.attendance || 0 },
+            { label: "Lessons Completed", val: dashboardData?.lessonsCompleted || 0, icon: Award, color: "purple", sub: "Keep up the good work!" },
+            { label: "Current Level", val: dashboardData?.currentLevel || "Beginner", icon: TrendingUp, color: "amber", sub: "Quran Studies" }
           ].map((stat, i) => (
             <div key={i} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-lg transition-all hover:-translate-y-1">
               <div className="flex justify-between items-start mb-4">
@@ -219,7 +252,7 @@ export const StudentDashboard = () => {
                   <stat.icon className="size-5" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{stat.val}</p>
+              <p className="text-3xl font-bold text-slate-900">{loading ? "..." : stat.val}</p>
               {stat.progress ? (
                 <div className="w-full bg-slate-100 h-2 rounded-full mt-4">
                   <div className={`h-full rounded-full transition-all ${

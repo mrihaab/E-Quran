@@ -29,19 +29,19 @@ export const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
   const adminName = user?.name || 'Admin';
-  const [stats, setStats] = useState({ totalUsers: 0, totalClasses: 0, totalRevenue: 0, totalTeachers: 0 });
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const data = await getAdminStats();
-        setStats({
-          totalUsers: data.totalUsers || 0,
-          totalClasses: data.totalClasses || 0,
-          totalRevenue: data.totalRevenue || 0,
-          totalTeachers: data.totalTeachers || 0
-        });
-      } catch (err) { /* fallback to 0s */ }
+        setStats(data);
+      } catch (err) {
+        console.error("Failed to fetch admin stats:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchStats();
   }, []);
@@ -78,7 +78,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Total Users</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalUsers || '—'}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalUsers || '—'}</p>
                   <p className="text-xs text-green-600 font-medium">+12% this month</p>
                 </div>
               </div>
@@ -91,7 +91,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Active Classes</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalClasses || '—'}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalClasses || '—'}</p>
                   <p className="text-xs text-green-600 font-medium">+8% this month</p>
                 </div>
               </div>
@@ -104,7 +104,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Total Revenue</p>
-                  <p className="text-2xl font-bold text-slate-900">${stats.totalRevenue || 0}</p>
+                  <p className="text-2xl font-bold text-slate-900">${stats?.totalRevenue || 0}</p>
                   <p className="text-xs text-green-600 font-medium">+15% this month</p>
                 </div>
               </div>
@@ -117,7 +117,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Growth Rate</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalTeachers || '—'}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalTeachers || '—'}</p>
                   <p className="text-xs text-green-600 font-medium">+5% this month</p>
                 </div>
               </div>
@@ -129,14 +129,7 @@ export const AdminDashboard = () => {
             {/* User Growth Trends */}
             <ProgressLineChart
               title="📈 User Growth Trends"
-              data={[
-                { name: 'Jan', value: 1200 },
-                { name: 'Feb', value: 1350 },
-                { name: 'Mar', value: 1580 },
-                { name: 'Apr', value: 1820 },
-                { name: 'May', value: 2100 },
-                { name: 'Jun', value: 2847 }
-              ]}
+              data={stats?.monthlyUsers?.map((m: any) => ({ name: m.month, value: m.count })) || []}
               height={300}
               color="purple"
             />
@@ -147,10 +140,8 @@ export const AdminDashboard = () => {
               data={[
                 { name: 'Jan', value: 25000 },
                 { name: 'Feb', value: 28000 },
-                { name: 'Mar', value: 32000 },
-                { name: 'Apr', value: 35000 },
-                { name: 'May', value: 38000 },
-                { name: 'Jun', value: 45230 }
+                { name: 'Mar', value: (stats?.totalRevenue * 0.7) || 32000 },
+                { name: 'Apr', value: stats?.totalRevenue || 35000 },
               ]}
               height={300}
               color="green"
@@ -162,12 +153,10 @@ export const AdminDashboard = () => {
             {/* User Role Distribution */}
             <DonutChart
               title="👥 User Role Distribution"
-              data={[
-                { name: 'Students', value: 65 },
-                { name: 'Teachers', value: 20 },
-                { name: 'Parents', value: 10 },
-                { name: 'Admins', value: 5 }
-              ]}
+              data={stats?.roleDistribution?.map((r: any) => ({ 
+                name: r.role.charAt(0).toUpperCase() + r.role.slice(1) + 's', 
+                value: r.count 
+              })) || []}
               height={300}
               colors="purple"
             />

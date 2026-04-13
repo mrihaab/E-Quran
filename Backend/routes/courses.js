@@ -1,31 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const courseController = require('../controllers/courseContentController');
+const { verifyToken, requireRole } = require('../middleware/auth');
 
-// ==================== GET ALL COURSES ====================
-router.get('/', async (req, res) => {
-  try {
-    const [courses] = await db.query(
-      `SELECT c.*, u.full_name as instructor_name
-       FROM courses c
-       LEFT JOIN users u ON c.instructor_id = u.id
-       ORDER BY c.created_at DESC`
-    );
+// MODULES
+router.post('/modules', verifyToken, requireRole('teacher', 'admin'), courseController.createModule);
+router.get('/classes/:classId/modules', verifyToken, courseController.getModulesByClass);
+router.delete('/modules/:moduleId', verifyToken, requireRole('teacher', 'admin'), courseController.deleteModule);
 
-    const formatted = courses.map(c => ({
-      id: c.id,
-      name: c.name,
-      level: c.level,
-      description: c.description,
-      instructor: c.instructor_name || 'TBA',
-      instructorId: c.instructor_id
-    }));
-
-    res.json({ courses: formatted });
-  } catch (error) {
-    console.error('Get courses error:', error);
-    res.status(500).json({ error: 'Failed to fetch courses.' });
-  }
-});
+// LESSONS
+router.post('/lessons', verifyToken, requireRole('teacher', 'admin'), courseController.createLesson);
+router.get('/modules/:moduleId/lessons', verifyToken, courseController.getLessonsByModule);
+router.delete('/lessons/:lessonId', verifyToken, requireRole('teacher', 'admin'), courseController.deleteLesson);
 
 module.exports = router;

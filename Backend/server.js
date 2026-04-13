@@ -1,51 +1,75 @@
 const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const logger = require('./utils/logger');
+const { errorHandler } = require('./middleware/errorMiddleware');
+const { swaggerUi, specs } = require('./config/swagger');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST']
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 
+// Attach IO to request for controllers
+app.set('io', io);
+
 // ==================== MIDDLEWARE ====================
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors());
 app.use(express.json());
 
+// HTTP Request Logging (Morgan + Winston)
+app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
+
+// Rate Limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, error: "Too many requests, please try again later", code: "RATE_LIMIT_EXCEEDED" }
+});
+app.use('/api/login', authLimiter);
+app.use('/api/register', authLimiter);
+
 // ==================== DATABASE ====================
-// Import db to trigger connection test on startup
 require('./config/db');
 
+// API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
 // ==================== ROUTES ====================
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const teacherRoutes = require('./routes/teachers');
-const classRoutes = require('./routes/classes');
-const enrollmentRoutes = require('./routes/enrollments');
-const messageRoutes = require('./routes/messages');
-const paymentRoutes = require('./routes/payments');
-const courseRoutes = require('./routes/courses');
-const contactRoutes = require('./routes/contact');
-const settingsRoutes = require('./routes/settings');
-const adminRoutes = require('./routes/admin');
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/teachers', require('./routes/teachers'));
+app.use('/api/classes', require('./routes/classes'));
+app.use('/api/enrollments', require('./routes/enrollments'));
+app.use('/api/messages', require('./routes/messages'));
+app.use('/api/payments', require('./routes/payments'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// API routes
-app.use('/api', authRoutes);          // /api/register, /api/login
-app.use('/api/users', userRoutes);    // /api/users/:id
-app.use('/api/teachers', teacherRoutes); // /api/teachers
-app.use('/api/classes', classRoutes); // /api/classes
-app.use('/api/enrollments', enrollmentRoutes); // /api/enrollments
-app.use('/api/messages', messageRoutes); // /api/messages
-app.use('/api/payments', paymentRoutes); // /api/payments
-app.use('/api/courses', courseRoutes); // /api/courses
-app.use('/api/contact', contactRoutes); // /api/contact
-app.use('/api/settings', settingsRoutes); // /api/settings
-app.use('/api/admin', adminRoutes);   // /api/admin/*
-
-// ==================== STATIC FILES ====================
+// Static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, '../Frontend/dist')));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'API route not found.' });
@@ -53,29 +77,23 @@ app.get('*', (req, res) => {
 });
 
 // ==================== ERROR HANDLING ====================
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({ error: 'Internal server error.' });
+app.use(errorHandler);
+
+// ==================== SOCKET.IO ====================
+io.on('connection', (socket) => {
+  logger.info(`New client connected: ${socket.id}`);
+  
+  socket.on('join', (userId) => {
+    socket.join(`user_${userId}`);
+    logger.info(`User ${userId} joined their notification room`);
+  });
+
+  socket.on('disconnect', () => {
+    logger.info('Client disconnected');
+  });
 });
 
 // ==================== START SERVER ====================
-app.listen(PORT, () => {
-  console.log(`\n🚀 E-Quran Academy Backend running at http://localhost:${PORT}`);
-  console.log(`📚 API available at http://localhost:${PORT}/api`);
-  console.log(`\n📋 Available API Routes:`);
-  console.log(`   POST   /api/register`);
-  console.log(`   POST   /api/login`);
-  console.log(`   GET    /api/users/:id`);
-  console.log(`   PUT    /api/users/:id`);
-  console.log(`   GET    /api/teachers`);
-  console.log(`   GET    /api/classes`);
-  console.log(`   POST   /api/enrollments`);
-  console.log(`   GET    /api/messages/:userId`);
-  console.log(`   POST   /api/payments`);
-  console.log(`   GET    /api/courses`);
-  console.log(`   POST   /api/contact`);
-  console.log(`   GET    /api/settings/:userId`);
-  console.log(`   GET    /api/admin/stats`);
-  console.log(`   GET    /api/admin/users`);
-  console.log('');
+server.listen(PORT, () => {
+  logger.info(`🚀 E-Quran Academy Backend running at http://localhost:${PORT}`);
 });

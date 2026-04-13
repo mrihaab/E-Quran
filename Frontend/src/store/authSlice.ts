@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState } from '../types';
-import { removeToken } from '../api';
+import { removeTokens } from '../api';
 
 const initialState: AuthState = {
   user: null,
@@ -19,7 +19,7 @@ const authSlice = createSlice({
       state.user = null;
       state.isAuthenticated = false;
       // Clear JWT token from localStorage
-      removeToken();
+      removeTokens();
     },
     updateUser: (state, action: PayloadAction<Partial<User>>) => {
       if (state.user) {

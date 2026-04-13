@@ -17,7 +17,7 @@ import { StudentClasses, TeacherClasses } from './pages/Classes';
 import { StudentMessages } from './components/Messages';
 import { StudentSettings, TeacherSettings, ParentSettings } from './pages/Settings';
 import { StudentPayment } from './pages/StudentPayment';
-import { ParentPayment } from './pages/ParentPayment.tsx';
+import { ParentPayment } from './pages/ParentPayment';
 import { TeacherPayment } from './pages/TeacherPayment';
 import { ParentStudentPayment } from './pages/ParentStudentPayment';
 import { TeacherReceivePayment } from './pages/TeacherReceivePayment';
@@ -134,7 +134,15 @@ export default function App() {
             <Route
               path="/student-messages"
               element={
-                <ProtectedRoute allowedRoles={['student']}>
+                <ProtectedRoute allowedRoles={['student', 'parent']}>
+                  <StudentMessages />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher-messages"
+              element={
+                <ProtectedRoute allowedRoles={['teacher']}>
                   <StudentMessages />
                 </ProtectedRoute>
               }

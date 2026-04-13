@@ -22,7 +22,9 @@ export const Navbar = () => {
     || currentPath === '/sessions'
     || currentPath === '/flexible'
     || currentPath === '/certified-qaris'
-    || currentPath.includes('/admin-');
+    || currentPath.includes('/admin-')
+    || currentPath.startsWith('/auth')
+    || currentPath.startsWith('/role-selection');
 
   if (isHidden) return null;
 
@@ -134,7 +136,7 @@ export const Navbar = () => {
 export const Footer = () => {
   const location = useLocation();
   const currentView = location.pathname.slice(1); // remove leading /
-  const isHidden = currentView.includes('dashboard') || currentView.includes('classes') || currentView.includes('messages') || currentView.includes('settings') || currentView === 'student-payment' || currentView === 'parent-payment' || currentView === 'teacher-payment' || currentView === 'parent-student-payment' || currentView === 'teacher-receive-payment' || currentView === 'sessions' || currentView === 'flexible' || currentView === 'certified-qaris' || currentView === 'find-teacher' || currentView.includes('admin-') || currentView.includes('register');
+  const isHidden = currentView.includes('dashboard') || currentView.includes('classes') || currentView.includes('messages') || currentView.includes('settings') || currentView === 'student-payment' || currentView === 'parent-payment' || currentView === 'teacher-payment' || currentView === 'parent-student-payment' || currentView === 'teacher-receive-payment' || currentView === 'sessions' || currentView === 'flexible' || currentView === 'certified-qaris' || currentView === 'find-teacher' || currentView.includes('admin-') || currentView.includes('register') || currentView.startsWith('auth') || currentView.startsWith('role-selection');
   
   if (isHidden) return null;
 
