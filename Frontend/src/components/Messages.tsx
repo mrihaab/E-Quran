@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sidebar, DashboardHeader } from './Dashboard';
-import { Search, Video, Phone, MoreVertical, Paperclip, Smile, Send, FileText, Download, Loader2 } from 'lucide-react';
+import { Search, Video, Phone, MoreVertical, Paperclip, Smile, Send, Loader2, Plus, Trash2 } from 'lucide-react';
 import { UserRole } from '../types';
 import { useAppSelector } from '../store/hooks';
-import { getConversations, getMessages, sendMessage, markMessageRead } from '../api';
+import { getConversations, getMessages, sendMessage, markMessageRead, deleteMessage } from '../api';
 import { useToast } from '../contexts/ToastContext';
+import { UserDirectory } from './UserDirectory';
 
 interface Conversation {
   partner_id: number;
@@ -30,6 +31,17 @@ interface Message {
   receiver_image: string | null;
 }
 
+interface User {
+  id: number;
+  full_name: string;
+  email: string;
+  phone?: string;
+  role: string;
+  profile_image: string | null;
+  status: string;
+  created_at: string;
+}
+
 export const StudentMessages = () => {
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
@@ -45,26 +57,30 @@ export const StudentMessages = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showUserDirectory, setShowUserDirectory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversations list
-  useEffect(() => {
+  const fetchConversations = async () => {
     if (!userId) return;
-    const fetchConversations = async () => {
-      try {
-        const data = await getConversations(userId);
-        setConversations(data.conversations || []);
-        // Auto-select first conversation if available
-        if ((data.conversations || []).length > 0 && !selectedPartner) {
-          setSelectedPartner(data.conversations[0]);
-        }
-      } catch (err: any) {
-        // Fallback: show empty state
-        setConversations([]);
-      } finally {
-        setLoading(false);
+    try {
+      // getConversations() takes no arguments — uses logged-in user from JWT
+      const data = await getConversations();
+      const convList: Conversation[] = data?.conversations || [];
+      setConversations(convList);
+      // Auto-select first conversation if none selected
+      if (convList.length > 0 && !selectedPartner) {
+        setSelectedPartner(convList[0]);
       }
-    };
+    } catch (err: any) {
+      console.error('Failed to load conversations:', err.message);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchConversations();
   }, [userId]);
 
@@ -73,27 +89,24 @@ export const StudentMessages = () => {
     if (!userId || !selectedPartner) return;
     const fetchMsgs = async () => {
       try {
-        const data = await getMessages(userId);
-        // Filter messages for selected conversation partner
-        const filtered = (data.messages || []).filter(
-          (m: Message) =>
-            (m.sender_id === selectedPartner.partner_id && m.receiver_id === userId) ||
-            (m.sender_id === userId && m.receiver_id === selectedPartner.partner_id)
-        );
-        setMessages(filtered);
+        // getMessages(partnerId) — pass the PARTNER's ID, not our own
+        const data = await getMessages(selectedPartner.partner_id);
+        setMessages(data?.messages || []);
 
-        // Mark unread messages as read
-        for (const msg of filtered) {
-          if (msg.receiver_id === userId && !msg.is_read) {
-            try { await markMessageRead(msg.id); } catch { /* silent */ }
-          }
-        }
+        // Mark all messages from partner as read in one call
+        await markMessageRead(selectedPartner.partner_id).catch(() => {});
+        
+        // Update unread count in conversations list
+        setConversations(prev => prev.map(c =>
+          c.partner_id === selectedPartner.partner_id ? { ...c, unread_count: 0 } : c
+        ));
       } catch (err: any) {
+        console.error('Failed to load messages:', err.message);
         setMessages([]);
       }
     };
     fetchMsgs();
-  }, [userId, selectedPartner]);
+  }, [userId, selectedPartner?.partner_id]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -103,21 +116,35 @@ export const StudentMessages = () => {
   const handleSend = async () => {
     if (!newMessage.trim() || !selectedPartner || !userId) return;
     setSending(true);
+    const msgContent = newMessage.trim();
+    setNewMessage('');
+
+    // Optimistic UI update
+    const optimisticMsg: Message = {
+      id: Date.now(),
+      sender_id: userId,
+      receiver_id: selectedPartner.partner_id,
+      content: msgContent,
+      is_read: false,
+      created_at: new Date().toISOString(),
+      sender_name: user?.name || '',
+      sender_image: user?.profileImage || null,
+      receiver_name: selectedPartner.partner_name,
+      receiver_image: selectedPartner.partner_image,
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
     try {
-      await sendMessage(selectedPartner.partner_id, newMessage.trim());
-      setNewMessage('');
-      // Refresh messages
-      const data = await getMessages(userId);
-      const filtered = (data.messages || []).filter(
-        (m: Message) =>
-          (m.sender_id === selectedPartner.partner_id && m.receiver_id === userId) ||
-          (m.sender_id === userId && m.receiver_id === selectedPartner.partner_id)
-      );
-      setMessages(filtered);
-      // Refresh conversations too (to update last message)
-      const convData = await getConversations(userId);
-      setConversations(convData.conversations || []);
+      await sendMessage(selectedPartner.partner_id, msgContent);
+      // Refresh conversations to update last message preview
+      fetchConversations();
+      // Refresh messages to get server-side IDs
+      const data = await getMessages(selectedPartner.partner_id);
+      setMessages(data?.messages || []);
     } catch (err: any) {
+      // Rollback optimistic update
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+      setNewMessage(msgContent);
       addToast('error', 'Send Failed', err.message || 'Could not send message.');
     } finally {
       setSending(false);
@@ -131,7 +158,17 @@ export const StudentMessages = () => {
     }
   };
 
+  const handleDeleteMessage = async (messageId: number) => {
+    try {
+      await deleteMessage(messageId);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (err: any) {
+      addToast('error', 'Delete Failed', err.message || 'Could not delete message.');
+    }
+  };
+
   const formatTime = (dateStr: string) => {
+    if (!dateStr) return '';
     const d = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
@@ -156,7 +193,16 @@ export const StudentMessages = () => {
         {/* Conversations List */}
         <section className="w-80 border-r border-slate-200 bg-white flex flex-col">
           <div className="p-4 border-b border-slate-100">
-            <h2 className="text-xl font-bold mb-4">Messages</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Messages</h2>
+              <button
+                onClick={() => setShowUserDirectory(true)}
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                title="New Message"
+              >
+                <Plus className="size-5" />
+              </button>
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4" />
               <input
@@ -175,7 +221,9 @@ export const StudentMessages = () => {
               </div>
             ) : filteredConversations.length === 0 ? (
               <div className="text-center py-12 px-4">
-                <p className="text-slate-500 text-sm">No conversations yet. Send a message to start a chat!</p>
+                <Send className="size-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">No conversations yet.</p>
+                <p className="text-slate-400 text-xs mt-1">Click the + button to start a chat!</p>
               </div>
             ) : (
               filteredConversations.map((conv) => (
@@ -185,18 +233,20 @@ export const StudentMessages = () => {
                   className={`p-4 cursor-pointer flex gap-3 transition-colors ${
                     selectedPartner?.partner_id === conv.partner_id
                       ? 'bg-blue-50 border-l-4 border-blue-600'
-                      : 'hover:bg-slate-50'
+                      : 'hover:bg-slate-50 border-l-4 border-transparent'
                   }`}
                 >
                   <div className="relative shrink-0">
                     <img
                       className="w-12 h-12 rounded-full object-cover"
-                      src={conv.partner_image || `https://picsum.photos/seed/user${conv.partner_id}/100/100`}
+                      src={conv.partner_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.partner_name)}&background=random&size=100`}
+                      alt={conv.partner_name}
                       referrerPolicy="no-referrer"
+                      onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.partner_name)}&background=random&size=100`; }}
                     />
                     {conv.unread_count > 0 && (
                       <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                        {conv.unread_count}
+                        {conv.unread_count > 9 ? '9+' : conv.unread_count}
                       </div>
                     )}
                   </div>
@@ -227,8 +277,10 @@ export const StudentMessages = () => {
                 <div className="flex items-center gap-3">
                   <img
                     className="w-10 h-10 rounded-full object-cover"
-                    src={selectedPartner.partner_image || `https://picsum.photos/seed/user${selectedPartner.partner_id}/100/100`}
+                    src={selectedPartner.partner_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedPartner.partner_name)}&background=random&size=100`}
+                    alt={selectedPartner.partner_name}
                     referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedPartner.partner_name)}&background=random&size=100`; }}
                   />
                   <div>
                     <h3 className="text-sm font-bold leading-none">{selectedPartner.partner_name}</h3>
@@ -236,9 +288,15 @@ export const StudentMessages = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-slate-400">
-                  <button className="hover:text-blue-600 transition-colors"><Video className="size-5" /></button>
-                  <button className="hover:text-blue-600 transition-colors"><Phone className="size-5" /></button>
-                  <button className="hover:text-blue-600 transition-colors"><MoreVertical className="size-5" /></button>
+                  <button className="hover:text-blue-600 transition-colors" title="Video Call">
+                    <Video className="size-5" />
+                  </button>
+                  <button className="hover:text-blue-600 transition-colors" title="Voice Call">
+                    <Phone className="size-5" />
+                  </button>
+                  <button className="hover:text-blue-600 transition-colors" title="More Options">
+                    <MoreVertical className="size-5" />
+                  </button>
                 </div>
               </header>
 
@@ -252,25 +310,41 @@ export const StudentMessages = () => {
                   messages.map((msg) => {
                     const isMine = msg.sender_id === userId;
                     return (
-                      <div key={msg.id} className={`flex gap-3 max-w-[80%] ${isMine ? 'flex-row-reverse ml-auto' : ''}`}>
+                      <div key={msg.id} className={`flex gap-3 max-w-[80%] group ${isMine ? 'flex-row-reverse ml-auto' : ''}`}>
                         <img
-                          className="w-8 h-8 rounded-full shrink-0 mt-auto"
+                          className="w-8 h-8 rounded-full shrink-0 mt-auto object-cover"
                           src={
                             isMine
-                              ? (msg.sender_image || `https://picsum.photos/seed/user${msg.sender_id}/100/100`)
-                              : (msg.sender_image || `https://picsum.photos/seed/user${msg.sender_id}/100/100`)
+                              ? (user?.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || '')}&background=random&size=100`)
+                              : (msg.sender_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.sender_name || '')}&background=random&size=100`)
                           }
+                          alt={isMine ? 'You' : msg.sender_name}
                           referrerPolicy="no-referrer"
+                          onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=User&background=random&size=100`; }}
                         />
-                        <div className={`p-3 rounded-xl shadow-sm ${
-                          isMine
-                            ? 'bg-blue-600 text-white rounded-br-none'
-                            : 'bg-white text-slate-800 rounded-bl-none border border-slate-100'
-                        }`}>
-                          <p className="text-sm">{msg.content}</p>
-                          <span className={`text-[10px] mt-1 block ${isMine ? 'text-white/80 text-right' : 'text-slate-500'}`}>
-                            {formatTime(msg.created_at)}
-                          </span>
+                        <div className="relative">
+                          <div className={`p-3 rounded-xl shadow-sm ${
+                            isMine
+                              ? 'bg-blue-600 text-white rounded-br-none'
+                              : 'bg-white text-slate-800 rounded-bl-none border border-slate-100'
+                          }`}>
+                            <p className="text-sm">{msg.content}</p>
+                            <span className={`text-[10px] mt-1 block ${isMine ? 'text-white/80 text-right' : 'text-slate-500'}`}>
+                              {formatTime(msg.created_at)}
+                              {isMine && msg.is_read && <span className="ml-1">✓✓</span>}
+                              {isMine && !msg.is_read && <span className="ml-1">✓</span>}
+                            </span>
+                          </div>
+                          {/* Delete button (only for sender) */}
+                          {isMine && (
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              className="absolute -top-2 -left-6 opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-white rounded-full shadow text-red-400 hover:text-red-600"
+                              title="Delete message"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -282,10 +356,12 @@ export const StudentMessages = () => {
               {/* Message Input */}
               <div className="p-4 bg-white border-t border-slate-200 shrink-0">
                 <div className="flex items-center gap-2 max-w-5xl mx-auto">
-                  <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Paperclip className="size-5" /></button>
+                  <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Attach file">
+                    <Paperclip className="size-5" />
+                  </button>
                   <div className="flex-1 relative">
                     <input
-                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/50"
+                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500/50 outline-none"
                       placeholder="Type your message..."
                       type="text"
                       value={newMessage}
@@ -297,7 +373,8 @@ export const StudentMessages = () => {
                   <button
                     onClick={handleSend}
                     disabled={sending || !newMessage.trim()}
-                    className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 transition-all shadow-md disabled:opacity-50"
+                    className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Send message"
                   >
                     {sending ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
                   </button>
@@ -310,12 +387,46 @@ export const StudentMessages = () => {
                 <Send className="size-16 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 mb-2">Select a conversation</h3>
                 <p className="text-slate-500 text-sm">Choose a chat from the sidebar to start messaging.</p>
+                <button
+                  onClick={() => setShowUserDirectory(true)}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                >
+                  Start a New Chat
+                </button>
               </div>
             </div>
           )}
         </section>
       </div>
     </main>
+
+    {/* User Directory Modal */}
+    <UserDirectory
+      isOpen={showUserDirectory}
+      onClose={() => setShowUserDirectory(false)}
+      onSelectUser={(user: User) => {
+        setShowUserDirectory(false);
+        const newConversation: Conversation = {
+          partner_id: user.id,
+          partner_name: user.full_name,
+          partner_image: user.profile_image,
+          partner_role: user.role,
+          last_message: '',
+          last_message_time: '',
+          unread_count: 0
+        };
+
+        setConversations(prev => {
+          const exists = prev.find(c => c.partner_id === user.id);
+          if (exists) {
+            setSelectedPartner(exists);
+            return prev;
+          }
+          setSelectedPartner(newConversation);
+          return [newConversation, ...prev];
+        });
+      }}
+    />
   </div>
   );
 };

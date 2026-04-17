@@ -1,8 +1,13 @@
 const db = require('../config/db');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
 const logger = require('../utils/logger');
+
+// Initialize Stripe only if API key is available
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+}
 
 /**
  * STRIPE: CREATE CHECKOUT SESSION
@@ -14,7 +19,7 @@ exports.createStripeSession = async (req, res, next) => {
 
     if (!amount || !classId) throw new ApiError(400, 'Amount and classId are required.');
 
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!stripe || !process.env.STRIPE_SECRET_KEY) {
       logger.warn('STRIPE_SECRET_KEY missing. Simulating payment.');
       return sendResponse(res, 200, { sessionId: 'mock_session_id', url: `${process.env.FRONTEND_URL}/payment-success?mock=true` });
     }
@@ -50,7 +55,7 @@ exports.verifyStripePayment = async (req, res, next) => {
     
     // In production, we'd use Stripe Webhooks. 
     // Here we'll do a manual verification pull for simplicity/portability
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!stripe || !process.env.STRIPE_SECRET_KEY) {
        // Mock success
        return sendResponse(res, 200, { status: 'completed' });
     }

@@ -4,9 +4,19 @@ const messageController = require('../controllers/messageController');
 const { verifyToken } = require('../middleware/auth');
 
 // ==================== MESSAGING ROUTES ====================
+// Send a message
 router.post('/', verifyToken, messageController.sendMessage);
-router.get('/:userId', verifyToken, messageController.getMessages);
-router.get('/:userId/conversations', verifyToken, messageController.getConversations);
-router.put('/:userId/read', verifyToken, messageController.markRead);
+
+// Get all conversations for the logged-in user (no param needed)
+router.get('/conversations', verifyToken, messageController.getConversations);
+
+// Get conversation with a specific partner
+router.get('/:partnerId', verifyToken, messageController.getMessages);
+
+// Mark all messages from a partner as read
+router.put('/:partnerId/read', verifyToken, messageController.markRead);
+
+// Delete a message
+router.delete('/:messageId', verifyToken, messageController.deleteMessage);
 
 module.exports = router;

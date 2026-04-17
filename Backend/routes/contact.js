@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
+const contactController = require('../controllers/contactController');
+const { verifyToken } = require('../middleware/auth');
 
 let transporter = null;
 
@@ -71,5 +73,13 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit contact form.' });
   }
 });
+
+// ==================== ADMIN CRUD FOR CONTACT MESSAGES ====================
+router.get('/admin/messages', verifyToken, contactController.getAllMessages);
+router.get('/admin/messages/stats', verifyToken, contactController.getMessageStats);
+router.get('/admin/messages/:id', verifyToken, contactController.getMessageById);
+router.put('/admin/messages/:id/status', verifyToken, contactController.updateMessageStatus);
+router.post('/admin/messages/:id/reply', verifyToken, contactController.replyToMessage);
+router.delete('/admin/messages/:id', verifyToken, contactController.deleteMessage);
 
 module.exports = router;

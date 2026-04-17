@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { User, Mail, Lock, Phone, Globe, BookOpen, ArrowRight, ArrowLeft } from 'lucide-react';
@@ -10,6 +10,8 @@ import { login } from '../store/authSlice';
 import { apiRegister } from '../api';
 import { useToast } from '../contexts/ToastContext';
 import { UserRole } from '../types';
+import { OTPVerificationModal } from '../components/OTPVerificationModal';
+import { GoogleLoginButton } from '../components/GoogleLoginButton';
 
 const FormWrapper = ({ title, subtitle, children, onBack }: { title: string, subtitle: string, children: React.ReactNode, onBack: () => void }) => (
   <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex items-center justify-center p-3 sm:p-4 md:p-6">
@@ -34,7 +36,8 @@ async function handleRegisterSubmit(
   dispatch: any,
   navigate: any,
   addToast: any,
-  setSubmitting: (b: boolean) => void
+  setSubmitting: (b: boolean) => void,
+  setPendingVerification: (email: string | null) => void
 ) {
   try {
     const payload: any = {
@@ -74,25 +77,11 @@ async function handleRegisterSubmit(
 
     const data = await apiRegister(payload);
 
-    // Dispatch login action to Redux
-    dispatch(login({
-      id: data.user.id,
-      name: data.user.name,
-      email: data.user.email,
-      role: data.user.role as UserRole,
-      token: data.token,
-      profileImage: data.user.profileImage,
-    }));
-
-    addToast('success', 'Registration Successful!', `Welcome to E-Quran Academy, ${data.user.name}!`);
-
-    // Navigate to appropriate dashboard
-    setTimeout(() => {
-      if (role === 'student') navigate('/student-dashboard');
-      else if (role === 'teacher') navigate('/teacher-dashboard');
-      else if (role === 'parent') navigate('/parent-dashboard');
-      else if (role === 'admin') navigate('/admin-dashboard');
-    }, 800);
+    // Show OTP verification modal
+    if (data.verificationRequired) {
+      setPendingVerification(data.email);
+      addToast('success', 'Registration Successful!', 'Please verify your email with the OTP sent.');
+    }
   } catch (error: any) {
     addToast('error', 'Registration Failed', error.message || 'Please try again.');
   } finally {
@@ -104,6 +93,7 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
 
   const validationSchema = Yup.object({
     fullName: Yup.string().required('Full name is required'),
@@ -120,6 +110,7 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
   });
 
   const formContent = (
+    <>
       <Formik
         initialValues={{
           fullName: '',
@@ -136,7 +127,7 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
         }}
         validationSchema={validationSchema}
         onSubmit={(values, { setSubmitting }) => {
-          handleRegisterSubmit(values, 'student', dispatch, navigate, addToast, setSubmitting);
+          handleRegisterSubmit(values, 'student', dispatch, navigate, addToast, setSubmitting, setPendingVerification);
         }}
       >
         {({ isSubmitting }) => (
@@ -183,6 +174,37 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
           </Form>
         )}
       </Formik>
+
+      {/* Google Sign Up - Outside Form */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-white text-slate-500">Or continue with</span>
+        </div>
+      </div>
+      <GoogleLoginButton role="student" />
+
+      {/* OTP Verification Modal */}
+      <OTPVerificationModal
+        isOpen={!!pendingVerification}
+        onClose={() => setPendingVerification(null)}
+        email={pendingVerification || ''}
+        onVerified={(data) => {
+          dispatch(login({
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role as UserRole,
+            token: data.accessToken,
+            profileImage: data.user.profileImage,
+          }));
+          addToast('success', 'Welcome!', 'Your account has been verified.');
+          navigate('/student-dashboard');
+        }}
+      />
+    </>
   );
 
   if (isEmbedded) {
@@ -204,6 +226,7 @@ export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
 
   const validationSchema = Yup.object({
     fullName: Yup.string().required('Full name is required'),
@@ -221,6 +244,7 @@ export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }
   });
 
   const formContent = (
+    <>
       <Formik
         initialValues={{
           fullName: '',
@@ -238,7 +262,7 @@ export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }
         }}
         validationSchema={validationSchema}
         onSubmit={(values, { setSubmitting }) => {
-          handleRegisterSubmit(values, 'teacher', dispatch, navigate, addToast, setSubmitting);
+          handleRegisterSubmit(values, 'teacher', dispatch, navigate, addToast, setSubmitting, setPendingVerification);
         }}
       >
         {({ isSubmitting }) => (
@@ -299,6 +323,37 @@ export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }
           </Form>
         )}
       </Formik>
+
+      {/* Google Sign Up - Outside Form */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-white text-slate-500">Or continue with</span>
+        </div>
+      </div>
+      <GoogleLoginButton role="teacher" />
+
+      {/* OTP Verification Modal */}
+      <OTPVerificationModal
+        isOpen={!!pendingVerification}
+        onClose={() => setPendingVerification(null)}
+        email={pendingVerification || ''}
+        onVerified={(data) => {
+          dispatch(login({
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role as UserRole,
+            token: data.accessToken,
+            profileImage: data.user.profileImage,
+          }));
+          addToast('success', 'Welcome!', 'Your account has been verified.');
+          navigate('/teacher-dashboard');
+        }}
+      />
+    </>
   );
 
   if (isEmbedded) {
@@ -320,6 +375,7 @@ export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean })
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
 
   const validationSchema = Yup.object({
     fullName: Yup.string().required('Full name is required'),
@@ -335,6 +391,7 @@ export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean })
   });
 
   const formContent = (
+    <>
       <Formik
         initialValues={{
           fullName: '',
@@ -350,7 +407,7 @@ export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean })
         }}
         validationSchema={validationSchema}
         onSubmit={(values, { setSubmitting }) => {
-          handleRegisterSubmit(values, 'parent', dispatch, navigate, addToast, setSubmitting);
+          handleRegisterSubmit(values, 'parent', dispatch, navigate, addToast, setSubmitting, setPendingVerification);
         }}
       >
         {({ isSubmitting }) => (
@@ -397,6 +454,37 @@ export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean })
           </Form>
         )}
       </Formik>
+
+      {/* Google Sign Up - Outside Form */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-white text-slate-500">Or continue with</span>
+        </div>
+      </div>
+      <GoogleLoginButton role="parent" />
+
+      {/* OTP Verification Modal */}
+      <OTPVerificationModal
+        isOpen={!!pendingVerification}
+        onClose={() => setPendingVerification(null)}
+        email={pendingVerification || ''}
+        onVerified={(data) => {
+          dispatch(login({
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role as UserRole,
+            token: data.accessToken,
+            profileImage: data.user.profileImage,
+          }));
+          addToast('success', 'Welcome!', 'Your account has been verified.');
+          navigate('/parent-dashboard');
+        }}
+      />
+    </>
   );
 
   if (isEmbedded) {
@@ -418,6 +506,7 @@ export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) 
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { addToast } = useToast();
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
 
   const validationSchema = Yup.object({
     fullName: Yup.string().required('Full name is required'),
@@ -433,6 +522,7 @@ export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) 
   });
 
   const formContent = (
+    <>
       <Formik
         initialValues={{
           fullName: '',
@@ -448,7 +538,7 @@ export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) 
         }}
         validationSchema={validationSchema}
         onSubmit={(values, { setSubmitting }) => {
-          handleRegisterSubmit(values, 'admin', dispatch, navigate, addToast, setSubmitting);
+          handleRegisterSubmit(values, 'admin', dispatch, navigate, addToast, setSubmitting, setPendingVerification);
         }}
       >
         {({ isSubmitting }) => (
@@ -496,6 +586,37 @@ export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) 
           </Form>
         )}
       </Formik>
+
+      {/* Google Sign Up - Outside Form */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-white text-slate-500">Or continue with</span>
+        </div>
+      </div>
+      <GoogleLoginButton role="admin" />
+
+      {/* OTP Verification Modal */}
+      <OTPVerificationModal
+        isOpen={!!pendingVerification}
+        onClose={() => setPendingVerification(null)}
+        email={pendingVerification || ''}
+        onVerified={(data) => {
+          dispatch(login({
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role as UserRole,
+            token: data.accessToken,
+            profileImage: data.user.profileImage,
+          }));
+          addToast('success', 'Welcome!', 'Your account has been verified.');
+          navigate('/admin-dashboard');
+        }}
+      />
+    </>
   );
 
   if (isEmbedded) {

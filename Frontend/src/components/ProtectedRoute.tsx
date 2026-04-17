@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '../store/hooks';
 
 interface ProtectedRouteProps {
@@ -9,13 +9,22 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const location = useLocation();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+  if (!isAuthenticated || !user) {
+    // Redirect to role-selection with login intent, preserve where they tried to go
+    return <Navigate to="/role-selection?intent=login" state={{ from: location }} replace />;
   }
 
-  if (user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (!allowedRoles.includes(user.role)) {
+    // Redirect to their actual dashboard instead of /unauthorized
+    const dashboardMap: Record<string, string> = {
+      student: '/student-dashboard',
+      teacher: '/teacher-dashboard',
+      parent: '/parent-dashboard',
+      admin: '/admin-dashboard',
+    };
+    return <Navigate to={dashboardMap[user.role] || '/'} replace />;
   }
 
   return <>{children}</>;

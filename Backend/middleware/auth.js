@@ -9,16 +9,20 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'equran-refresh-sec
  * Generate Access Token (Short-lived)
  */
 function generateToken(user) {
-  return jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.full_name
-    },
-    JWT_SECRET,
-    { expiresIn: '15m' } // Short-lived for security
-  );
+  const payload = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.full_name || user.fullName
+  };
+  
+  // Include additional fields for Google OAuth temp tokens
+  if (user.googleId) payload.googleId = user.googleId;
+  if (user.fullName) payload.fullName = user.fullName;
+  if (user.profileImage) payload.profileImage = user.profileImage;
+  if (user.isNewUser !== undefined) payload.isNewUser = user.isNewUser;
+  
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
 }
 
 /**

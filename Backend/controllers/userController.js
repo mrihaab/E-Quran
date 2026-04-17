@@ -2,6 +2,8 @@ const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
+const { getPaginatedRes } = require('../utils/paginate');
+const logger = require('../utils/logger');
 
 /**
  * GET USER PROFILE
@@ -137,6 +139,71 @@ exports.changePassword = async (req, res, next) => {
     await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, userId]);
 
     sendResponse(res, 200, {}, 'Password updated successfully.');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * SEARCH USERS - Directory for finding contacts
+ */
+exports.searchUsers = async (req, res, next) => {
+  try {
+    const { q, role, page, limit } = req.query;
+    const currentUserId = req.user.id;
+
+    let query = `
+      SELECT id, full_name, email, phone, role, profile_image, status, created_at
+      FROM users
+      WHERE is_deleted = 0 AND is_verified = 1 AND status = 'active'
+      AND id != ?
+    `;
+    const params = [currentUserId];
+
+    if (q) {
+      query += ` AND (full_name LIKE ? OR email LIKE ?)`;
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    if (role) {
+      query += ` AND role = ?`;
+      params.push(role);
+    }
+
+    query += ` ORDER BY full_name ASC`;
+
+    const result = await getPaginatedRes(query, params, page, limit);
+    
+    logger.info(`User search: "${q || ''}" role: "${role || 'all'}" - Found ${result.data.length} users`);
+    sendResponse(res, 200, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET ALL USERS - Admin only
+ */
+exports.getAllUsers = async (req, res, next) => {
+  try {
+    const { page, limit, role } = req.query;
+
+    let query = `
+      SELECT id, full_name, email, phone, role, profile_image, status, is_verified, created_at
+      FROM users
+      WHERE is_deleted = 0
+    `;
+    const params = [];
+
+    if (role) {
+      query += ` AND role = ?`;
+      params.push(role);
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await getPaginatedRes(query, params, page, limit);
+    sendResponse(res, 200, result);
   } catch (error) {
     next(error);
   }

@@ -18,11 +18,13 @@ import {
   FileText,
   Zap,
   Plus,
+  Mail,
   X,
   Check,
   CreditCard,
   BarChart3,
-  Eye
+  Eye,
+  ShieldCheck
 } from 'lucide-react';
 import { View, UserRole } from '../types';
 import {
@@ -71,6 +73,10 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
               <Users className="size-5" />
               <span className="text-sm">User Management</span>
             </button>
+            <button onClick={() => navigate('/admin/teacher-approval')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'admin-teacher-approval' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <ShieldCheck className="size-5" />
+              <span className="text-sm">Teacher Approval</span>
+            </button>
             <button onClick={() => navigate('/admin-analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'admin-analytics' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
               <BarChart3 className="size-5" />
               <span className="text-sm">Analytics</span>
@@ -82,6 +88,10 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
             <button onClick={() => navigate('/admin-settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'admin-settings' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
               <Settings className="size-5" />
               <span className="text-sm">Settings</span>
+            </button>
+            <button onClick={() => navigate('/admin-contact-messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'admin-contact-messages' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <Mail className="size-5" />
+              <span className="text-sm">Contact Messages</span>
             </button>
           </>
         ) : userRole === 'parent' ? (
@@ -162,7 +172,13 @@ export const DashboardHeader = ({ userRole }: { userRole: UserRole }) => {
             <p className="text-sm font-semibold leading-none">{userName}</p>
             <p className="text-xs text-slate-500 mt-1">{getRoleDisplay()}</p>
           </div>
-          <img className="size-10 rounded-full bg-slate-200 object-cover" src="https://picsum.photos/seed/ahmed/100/100" referrerPolicy="no-referrer" />
+          <img
+            className="size-10 rounded-full bg-slate-200 object-cover"
+            src={user?.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=random&size=100`}
+            alt={userName}
+            referrerPolicy="no-referrer"
+            onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=random&size=100`; }}
+          />
         </div>
       </div>
     </header>
@@ -296,31 +312,35 @@ export const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Recent Classes */}
+          {/* Recent Classes (Real Data) */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Recent & Upcoming Classes</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Enrolled Classes</h3>
             <div className="space-y-3">
-              {[
-                { teacher: "Sheikh Abdullah", subject: "Tajweed Fundamentals", time: "Today, 4:00 PM", status: "Upcoming", color: "amber" },
-                { teacher: "Sheikh Rashid", subject: "Quranic Recitation", time: "Tomorrow, 3:30 PM", status: "Scheduled", color: "blue" },
-                { teacher: "Ustazah Fatima", subject: "Islamic Studies", time: "Mar 28, 2:00 PM", status: "Scheduled", color: "green" }
-              ].map((cls, i) => (
-                <div key={i} className="p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-slate-900">{cls.subject}</p>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      cls.color === 'amber' ? 'bg-amber-50 text-amber-700' :
-                      cls.color === 'blue' ? 'bg-blue-50 text-blue-700' :
-                      'bg-green-50 text-green-700'
-                    }`}>{cls.status}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-1">with {cls.teacher}</p>
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <Clock className="size-3" />
-                    {cls.time}
-                  </p>
+              {loading ? (
+                <div className="text-center py-8 text-slate-400">Loading classes...</div>
+              ) : (dashboardData?.enrolledClasses || []).length === 0 ? (
+                <div className="text-center py-8">
+                  <BookOpen className="size-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-slate-500 text-sm">No classes enrolled yet.</p>
+                  <button onClick={() => handleNavigate('student-classes')} className="mt-3 text-primary text-sm hover:underline">Browse Classes</button>
                 </div>
-              ))}
+              ) : (
+                (dashboardData.enrolledClasses || []).map((cls: any, i: number) => (
+                  <div key={cls.id || i} className="p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-semibold text-slate-900">{cls.name}</p>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        cls.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                      }`}>{cls.status || 'Active'}</span>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-1">with {cls.teacher_name}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Clock className="size-3" />
+                      {cls.schedule || 'Schedule TBD'} • {cls.level || ''}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

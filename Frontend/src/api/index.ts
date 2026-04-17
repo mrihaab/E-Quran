@@ -2,11 +2,11 @@
 const API_BASE = '/api';
 
 // ==================== TOKEN MANAGEMENT ====================
-function getToken(): string | null {
+export function getToken(): string | null {
   return localStorage.getItem('equran_token');
 }
 
-function getRefreshToken(): string | null {
+export function getRefreshToken(): string | null {
   return localStorage.getItem('equran_refresh_token');
 }
 
@@ -56,7 +56,7 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
         removeTokens();
-        window.location.href = '/login';
+        window.location.href = '/role-selection?intent=login';
         throw new Error('Session expired. Please login again.');
       }
 
@@ -81,11 +81,11 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
         });
         const refreshData = await refreshRes.json();
 
-        if (refreshData.success && refreshData.data.accessToken) {
+        if (refreshData.success && refreshData.data?.accessToken) {
           localStorage.setItem('equran_token', refreshData.data.accessToken);
           isRefreshing = false;
           processQueue(refreshData.data.accessToken);
-          
+
           // Retry original request
           return apiFetch(url, options);
         } else {
@@ -95,17 +95,20 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
         isRefreshing = false;
         processQueue(null);
         removeTokens();
-        window.location.href = '/login';
+        window.location.href = '/role-selection?intent=login';
         throw new Error('Session expired. Please login again.');
       }
     }
 
     if (!res.ok || data.success === false) {
-      throw new Error(data.message || 'Something went wrong');
+      const error: any = new Error(data.message || 'Something went wrong');
+      error.code = data.code;
+      error.status = res.status;
+      throw error;
     }
 
     // Return the 'data' part of the standardized backend response
-    return data.data || data;
+    return data.data !== undefined ? data.data : data;
   } catch (error: any) {
     if (error.name === 'SyntaxError') {
       throw new Error('Data format error from server.');
@@ -116,40 +119,158 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
 
 // ==================== AUTH ====================
 export async function apiRegister(payload: any) {
-  const data = await apiFetch('/auth/register', {
+  const response = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return data;
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    const error: any = new Error(data.message || 'Registration failed');
+    error.code = data.code;
+    throw error;
+  }
+  return data.data || data;
 }
 
 export async function apiLogin(email: string, password: string) {
-  // Use raw fetch for login to handle special case without interceptor logic
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
   const data = await response.json();
-  
-  if (data.success && data.data.accessToken) {
+
+  if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);
+    return data.data; // { user, accessToken, refreshToken }
   } else {
-    throw new Error(data.message || 'Login failed');
+    // Pass through all error details for specific error handling
+    const error: any = new Error(data.message || 'Login failed');
+    error.code = data.code;
+    error.showForgotPassword = data.showForgotPassword;
+    error.isGoogleAccount = data.isGoogleAccount;
+    error.requiresRegistration = data.requiresRegistration;
+    error.requiresApproval = data.requiresApproval;
+    error.verificationRequired = data.verificationRequired;
+    error.email = data.email;
+    throw error;
   }
-  return data.data;
 }
 
 export async function apiLogout() {
   const refreshToken = getRefreshToken();
   try {
-    await apiFetch('/auth/logout', {
+    await fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken })
     });
   } finally {
     removeTokens();
   }
+}
+
+// ==================== OTP VERIFICATION ====================
+export async function apiSendOTP(email: string) {
+  const response = await fetch(`${API_BASE}/auth/send-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || 'Failed to send OTP');
+  }
+  return data.data || data;
+}
+
+export async function apiVerifyOTP(email: string, otp: string) {
+  const response = await fetch(`${API_BASE}/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+  const data = await response.json();
+
+  if (data.success && data.data?.accessToken) {
+    setTokens(data.data.accessToken, data.data.refreshToken);
+  }
+  return data;
+}
+
+// ==================== FORGOT PASSWORD ====================
+export async function apiForgotPassword(email: string) {
+  const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || 'Failed to send reset OTP');
+  }
+  return data.data || data;
+}
+
+export async function apiVerifyResetOTP(email: string, otp: string) {
+  const response = await fetch(`${API_BASE}/auth/verify-reset-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || 'Invalid OTP');
+  }
+  return data.data || data;
+}
+
+export async function apiResetPassword(resetToken: string, newPassword: string) {
+  const response = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resetToken, newPassword }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || 'Password reset failed');
+  }
+  return data.data || data;
+}
+
+// ==================== GOOGLE OAUTH ====================
+// Must point directly to the backend — do NOT use /api proxy path.
+// Google OAuth uses server-side redirects that break through Vite proxy.
+const BACKEND_DIRECT_URL = 'http://localhost:5000';
+
+export function getGoogleAuthUrl(role?: string) {
+  let url = `${BACKEND_DIRECT_URL}/api/auth/google`;
+  if (role) {
+    const state = encodeURIComponent(JSON.stringify({ role }));
+    url += `?state=${state}`;
+  }
+  return url;
+}
+
+export async function apiCompleteGoogleRegistration(payload: {
+  googleId: string;
+  email: string;
+  fullName: string;
+  profileImage?: string;
+  role: string;
+}) {
+  const response = await fetch(`${API_BASE}/auth/google/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+
+  if (data.success && data.data?.accessToken) {
+    setTokens(data.data.accessToken, data.data.refreshToken);
+  }
+  return data;
 }
 
 // ==================== USERS ====================
@@ -159,6 +280,13 @@ export async function getUser(userId: number) {
 
 export async function updateUser(userId: number, payload: Record<string, any>) {
   return apiFetch(`/users/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changePassword(userId: number, payload: { currentPassword: string; newPassword: string }) {
+  return apiFetch(`/users/${userId}/password`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
@@ -179,6 +307,7 @@ export async function getClasses(params?: any) {
   const query = params ? `?${new URLSearchParams(params).toString()}` : '';
   return apiFetch(`/classes${query}`);
 }
+
 export async function getTeacherClasses(teacherId: number) {
   return apiFetch(`/classes/teacher/${teacherId}`);
 }
@@ -213,20 +342,41 @@ export async function unenroll(enrollmentId: number) {
 }
 
 // ==================== MESSAGES ====================
+/**
+ * Send a message to a receiver
+ */
 export async function sendMessage(receiverId: number, content: string) {
   return apiFetch('/messages', { method: 'POST', body: JSON.stringify({ receiverId, content }) });
 }
 
+/**
+ * Get messages between logged-in user and a partner
+ * @param partnerId - The ID of the conversation partner
+ */
 export async function getMessages(partnerId: number) {
   return apiFetch(`/messages/${partnerId}`);
 }
 
+/**
+ * Get all conversations for the logged-in user
+ */
 export async function getConversations() {
   return apiFetch('/messages/conversations');
 }
 
+/**
+ * Mark all messages from a partner as read
+ * @param partnerId - The ID of the message sender (conversation partner)
+ */
 export async function markMessageRead(partnerId: number) {
   return apiFetch(`/messages/${partnerId}/read`, { method: 'PUT' });
+}
+
+/**
+ * Delete a message
+ */
+export async function deleteMessage(messageId: number) {
+  return apiFetch(`/messages/${messageId}`, { method: 'DELETE' });
 }
 
 // ==================== PAYMENTS ====================
@@ -247,6 +397,7 @@ export async function verifyPayment(sessionId: string) {
 export async function getPaymentHistory() {
   return apiFetch('/payments/history');
 }
+
 export async function createPayment(payload: { payeeId: number; amount: number; paymentMethod?: string; notes?: string; classId?: number }) {
   return apiFetch('/payments/stripe/create-session', {
     method: 'POST',
@@ -304,6 +455,7 @@ export async function updateAdminUser(userId: number, payload: Record<string, an
     body: JSON.stringify(payload),
   });
 }
+
 export async function deleteAdminUser(userId: number) {
   return apiFetch(`/admin/users/${userId}`, {
     method: 'DELETE',
@@ -313,21 +465,20 @@ export async function deleteAdminUser(userId: number) {
 export async function getAdminStats() {
   return apiFetch('/admin/stats');
 }
-export async function changePassword(userId: number, payload: { currentPassword: string; newPassword: string }) {
-  return apiFetch(`/users/${userId}/password`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
+
+// ==================== SETTINGS ====================
 export async function getSettings(userId: number) {
   return apiFetch(`/settings/${userId}`);
 }
+
 export async function updateSettings(userId: number, payload: Record<string, any>) {
   return apiFetch(`/settings/${userId}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
+
+// ==================== CONTACT ====================
 export async function submitContact(payload: { name: string; email: string; subject: string; message: string }) {
   return apiFetch('/contact', {
     method: 'POST',
@@ -344,7 +495,60 @@ export async function getTeacherDashboardData() {
   return apiFetch('/dashboard/teacher');
 }
 
+export async function getParentDashboardData() {
+  return apiFetch('/dashboard/parent');
+}
+
 // ==================== HEALTH ====================
 export async function getHealth() {
   return apiFetch('/health');
+}
+
+// ==================== USER DIRECTORY / SEARCH ====================
+export async function searchUsers(query?: string, role?: string) {
+  const params = new URLSearchParams();
+  if (query) params.append('q', query);
+  if (role) params.append('role', role);
+  return apiFetch(`/users/search?${params.toString()}`);
+}
+
+export async function getUserDirectory() {
+  return apiFetch('/users/directory');
+}
+
+// ==================== ADMIN CONTACT MESSAGES ====================
+export async function getAdminContactMessages(params?: { status?: string; page?: number; limit?: number }) {
+  const queryParams = new URLSearchParams();
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  return apiFetch(`/contact/admin/messages?${queryParams.toString()}`);
+}
+
+export async function getContactMessageStats() {
+  return apiFetch('/contact/admin/messages/stats');
+}
+
+export async function getContactMessageById(id: number) {
+  return apiFetch(`/contact/admin/messages/${id}`);
+}
+
+export async function updateContactMessageStatus(id: number, status: string, adminNotes?: string) {
+  return apiFetch(`/contact/admin/messages/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, adminNotes })
+  });
+}
+
+export async function replyToContactMessage(id: number, replyMessage: string) {
+  return apiFetch(`/contact/admin/messages/${id}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ replyMessage })
+  });
+}
+
+export async function deleteContactMessage(id: number) {
+  return apiFetch(`/contact/admin/messages/${id}`, {
+    method: 'DELETE'
+  });
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Mail, ShieldCheck, ArrowRight, ArrowLeft, KeyRound } from 'lucide-react';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { useToast } from '../contexts/ToastContext';
@@ -15,6 +15,7 @@ import {
   RegisterParent, 
   RegisterAdmin 
 } from './Registration';
+import { GoogleLoginButton } from '../components/GoogleLoginButton';
 
 export const AuthPage = () => {
   const { role } = useParams<{ role: string }>();
@@ -41,35 +42,49 @@ export const AuthPage = () => {
 
   const handleLogin = async (values: { email: string; password: string }, setSubmitting: (b: boolean) => void) => {
     try {
+      // apiLogin returns { user, accessToken, refreshToken } and stores tokens automatically
       const data = await apiLogin(values.email, values.password);
 
-      // Verify that the user role matches the section they are logging into
-      // e.g. If they try to log into Teacher portal with Student credentials
-      if (data.user.role !== role) {
-         addToast('error', 'Access Denied', `You are registered as a ${data.user.role}, but tried to login as a ${role}.`);
-         setSubmitting(false);
-         return;
+      // Verify that the logged-in user's role matches the portal they used
+      if (data.user && data.user.role !== role) {
+        addToast('error', 'Access Denied', `You are registered as a ${data.user.role}, but tried to login as a ${role}. Please go to the correct portal.`);
+        setSubmitting(false);
+        return;
       }
 
+      // Dispatch to Redux — tokens are already stored in localStorage by apiLogin
       dispatch(loginAction({
         id: data.user.id,
         name: data.user.name,
         email: data.user.email,
         role: data.user.role as UserRole,
-        token: data.token,
-        profileImage: data.user.profileImage,
+        profileImage: data.user.profileImage || null,
       }));
 
       addToast('success', 'Login Successful!', `Welcome back, ${data.user.name}!`);
 
       setTimeout(() => {
-        if (role === 'student') navigate('/student-dashboard');
-        else if (role === 'teacher') navigate('/teacher-dashboard');
-        else if (role === 'parent') navigate('/parent-dashboard');
-        else if (role === 'admin') navigate('/admin-dashboard');
-      }, 800);
+        if (data.user.role === 'student') navigate('/student-dashboard');
+        else if (data.user.role === 'teacher') navigate('/teacher-dashboard');
+        else if (data.user.role === 'parent') navigate('/parent-dashboard');
+        else if (data.user.role === 'admin') navigate('/admin-dashboard');
+        else navigate('/');
+      }, 500);
     } catch (error: any) {
-      addToast('error', 'Login Failed', error.message || 'Please check your credentials and try again.');
+      // Handle specific error cases with targeted messages
+      if (error.verificationRequired) {
+        addToast('warning', 'Email Not Verified', `${error.message} Redirecting to verification...`);
+        setTimeout(() => navigate(`/auth/${role}?intent=verify&email=${encodeURIComponent(values.email)}`), 1500);
+      } else if (error.isGoogleAccount) {
+        addToast('info', 'Google Account', error.message);
+      } else if (error.requiresRegistration) {
+        addToast('warning', 'Not Registered', error.message);
+        setTimeout(() => navigate(`/auth/${role}?intent=signup`), 1500);
+      } else if (error.requiresApproval) {
+        addToast('warning', 'Pending Approval', error.message);
+      } else {
+        addToast('error', 'Login Failed', error.message || 'Please check your credentials and try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -154,7 +169,16 @@ export const AuthPage = () => {
                         <ErrorMessage name="email" component="div" className="text-red-500 text-sm ml-1" />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-slate-700 ml-1">Password</label>
+                        <div className="flex items-center justify-between ml-1">
+                          <label className="text-sm font-semibold text-slate-700">Password</label>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/forgot-password')}
+                            className="text-sm text-primary hover:underline font-medium"
+                          >
+                            Forgot Password?
+                          </button>
+                        </div>
                         <div className="relative group">
                           <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors size-5" />
                           <Field
@@ -180,13 +204,28 @@ export const AuthPage = () => {
                 </Formik>
 
                 {/* Demo hints */}
-                <div className="mt-8 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center">
-                  <p className="text-xs text-slate-500 font-medium">Demo {roleDisplay} (password: admin123):</p>
-                  <p className="text-xs font-bold text-primary mt-1">
-                    {role === 'student' && 'student@equran.com'}
-                    {role === 'teacher' && 'ahmed.teacher@equran.com'}
-                    {role === 'parent' && 'parent@equran.com'}
-                    {role === 'admin' && 'admin@equran.com'}
+                {/* Google Login */}
+                <div className="mt-6">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-slate-500">Or continue with</span>
+                    </div>
+                  </div>
+                  <GoogleLoginButton />
+                </div>
+
+                <div className="mt-6 text-center">
+                  <p className="text-xs text-slate-400">Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIntent('signup')}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Register here
+                    </button>
                   </p>
                 </div>
               </motion.div>

@@ -22,12 +22,14 @@ CREATE TABLE IF NOT EXISTS users (
   verification_token VARCHAR(255) DEFAULT NULL,
   reset_token VARCHAR(255) DEFAULT NULL,
   reset_token_expiry DATETIME DEFAULT NULL,
+  google_id VARCHAR(255) DEFAULT NULL UNIQUE,
   profile_image VARCHAR(500) DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX (email),
   INDEX (role),
-  INDEX (is_deleted)
+  INDEX (is_deleted),
+  INDEX (google_id)
 );
 
 -- ==================== REFRESH TOKENS TABLE ====================
@@ -41,6 +43,19 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX (user_id),
   INDEX (token)
+);
+
+-- ==================== OTP VERIFICATIONS TABLE ====================
+CREATE TABLE IF NOT EXISTS otp_verifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(150) NOT NULL,
+  otp VARCHAR(255) NOT NULL,
+  attempts INT DEFAULT 0,
+  expires_at DATETIME NOT NULL,
+  is_used TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (email),
+  INDEX (expires_at)
 );
 
 -- ==================== ROLE-SPECIFIC TABLES ====================

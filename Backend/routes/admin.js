@@ -8,7 +8,9 @@ router.use(verifyToken, requireRole('admin'));
 
 // ==================== USER MANAGEMENT ====================
 router.get('/users', adminController.getAllUsers);
+router.get('/users/:userId', adminController.getUser);
 router.put('/users/:userId', adminController.updateUser);
+router.delete('/users/:userId', adminController.deleteUser);
 
 // ==================== ANALYTICS & REPORTING ====================
 router.get('/stats', adminController.getStats);

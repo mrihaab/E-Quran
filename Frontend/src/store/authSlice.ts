@@ -2,6 +2,8 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState } from '../types';
 import { removeTokens } from '../api';
 
+// redux-persist (in store.ts) handles state persistence automatically.
+// No manual localStorage needed here.
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
@@ -18,7 +20,6 @@ const authSlice = createSlice({
     logout: (state) => {
       state.user = null;
       state.isAuthenticated = false;
-      // Clear JWT token from localStorage
       removeTokens();
     },
     updateUser: (state, action: PayloadAction<Partial<User>>) => {

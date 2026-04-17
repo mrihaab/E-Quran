@@ -14,13 +14,15 @@ export interface Toast {
 
 // Auth types
 export interface User {
+  id: number;
   name: string;
+  email: string;
   role: UserRole;
-  email?: string;
-  id?: number;
-  token?: string;
-  profileImage?: string;
+  profileImage?: string | null;
   phone?: string;
+  gender?: string;
+  address?: string;
+  isVerified?: boolean;
 }
 
 export interface AuthState {

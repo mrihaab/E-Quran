@@ -30,6 +30,13 @@ import { Teachers } from './pages/Teachers';
 import { Sessions } from './pages/Sessions';
 import { Flexible } from './pages/Flexible';
 import { CertifiedQaris } from './pages/CertifiedQaris';
+import { GoogleCallback } from './pages/GoogleCallback';
+import { GoogleRoleSelect } from './pages/GoogleRoleSelect';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { AdminApproval } from './pages/AdminApproval';
+import { AdminContactMessages } from './pages/AdminContactMessages';
+import { TeacherApproval } from './pages/TeacherApproval';
+import { ParentActivation } from './pages/ParentActivation';
 import { ToastProvider } from './contexts/ToastContext';
 import { ToastContainer } from './components/ToastContainer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -51,6 +58,42 @@ export default function App() {
             <Route path="/register-teacher" element={<Navigate to="/auth/teacher?intent=signup" replace />} />
             <Route path="/register-parent" element={<Navigate to="/auth/parent?intent=signup" replace />} />
             <Route path="/register-admin" element={<Navigate to="/auth/admin?intent=signup" replace />} />
+            
+            {/* Google OAuth Routes */}
+            <Route path="/auth/google/callback" element={<GoogleCallback />} />
+            <Route path="/auth/google/role-select" element={<GoogleRoleSelect />} />
+            
+            {/* Forgot Password */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            
+            {/* Parent Invitation Activation */}
+            <Route path="/parent/activate/:token" element={<ParentActivation />} />
+            
+            {/* Admin Approval Workflow */}
+            <Route
+              path="/admin-approval"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminApproval />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/teacher-approval"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <TeacherApproval />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-contact-messages"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminContactMessages />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/student-dashboard"
               element={
