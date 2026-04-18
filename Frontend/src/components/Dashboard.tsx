@@ -107,6 +107,12 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
               <BookMarked className="size-5" />
               <span className="text-sm">{userRole === 'teacher' ? 'My Classes' : 'Classes'}</span>
             </button>
+            {userRole === 'student' && (
+              <button onClick={() => navigate('/courses')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'courses' ? 'bg-green-100 text-green-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <BookOpen className="size-5" />
+                <span className="text-sm">Courses</span>
+              </button>
+            )}
             <button onClick={() => navigate(`/${messagesView}`)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === messagesView ? (userRole === 'teacher' ? 'bg-green-100 text-green-700' : 'bg-green-100 text-green-700') : 'text-slate-600 hover:bg-slate-50'}`}>
               <MessageSquare className="size-5" />
               <span className="text-sm">Messages</span>
@@ -115,6 +121,12 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
               <button onClick={() => navigate('/find-teacher')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'find-teacher' ? 'bg-green-100 text-green-700' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <Users className="size-5" />
                 <span className="text-sm">Find Teacher</span>
+              </button>
+            )}
+            {userRole === 'student' && (
+              <button onClick={() => navigate('/teachers')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'teachers' ? 'bg-green-100 text-green-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <Search className="size-5" />
+                <span className="text-sm">Browse Teachers</span>
               </button>
             )}
           </>

@@ -192,6 +192,8 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
         onClose={() => setPendingVerification(null)}
         email={pendingVerification || ''}
         onVerified={(data) => {
+          console.log('[REGISTER DEBUG] Student onVerified - data:', data);
+          console.log('[REGISTER DEBUG] Student onVerified - data.user.role:', data.user?.role);
           dispatch(login({
             id: data.user.id,
             name: data.user.name,
@@ -201,6 +203,7 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
             profileImage: data.user.profileImage,
           }));
           addToast('success', 'Welcome!', 'Your account has been verified.');
+          console.log('[REGISTER DEBUG] Student navigating to /student-dashboard');
           navigate('/student-dashboard');
         }}
       />

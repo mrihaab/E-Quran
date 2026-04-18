@@ -2,11 +2,19 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Users, Clock, Award, BookOpen } from 'lucide-react';
 
+/**
+ * LandingPage Component
+ * 
+ * This is the main public landing page for E-Quran Academy.
+ * It displays when users visit the root URL '/' and is accessible
+ * without authentication. Contains hero section, features, and CTAs.
+ */
 export const LandingPage = () => {
   const navigate = useNavigate();
 
   return (
     <div>
+      {/* Hero Section - Main banner with headline, description, and CTA buttons */}
       <section className="relative overflow-hidden bg-white px-4 sm:px-6 md:px-20 py-12 sm:py-16 md:py-20 lg:py-28">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-8 sm:gap-12 lg:flex-row">
           <div className="flex-1 space-y-6 sm:space-y-8 text-center lg:text-left">
@@ -21,18 +29,14 @@ export const LandingPage = () => {
               Experience a personalized journey of faith through interactive online sessions. Learn Tajweed, Hifz, and Translation from certified scholars worldwide.
             </p>
             <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4 lg:justify-start">
-              <button 
-                onClick={() => navigate('/role-selection?intent=signup')} 
-                className="rounded-full bg-primary px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-bold text-white shadow-xl shadow-primary/25 hover:-translate-y-0.5 transition-all"
-              >
-                Start Learning
-              </button>
-              <button 
-                onClick={() => navigate('/teachers')} 
-                className="rounded-full border-2 border-primary px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-bold text-primary hover:bg-primary/5 transition-all"
-              >
-                Browse Teachers
-              </button>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={() => navigate('/role-selection?intent=signup')} 
+                  className="bg-primary text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+                >
+                  Get Started
+                </button>
+              </div>
             </div>
           </div>
           <div className="relative flex-1 w-full max-w-md lg:max-w-none">
@@ -50,12 +54,14 @@ export const LandingPage = () => {
         </div>
       </section>
 
+      {/* Features Section - Displays key platform benefits with icons */}
       <section className="bg-slate-50 px-6 py-20 md:px-20">
         <div className="mx-auto max-w-7xl">
           <div className="mb-16 text-center">
             <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">Our Features</h2>
             <h3 className="mt-4 text-3xl font-extrabold text-slate-900 sm:text-4xl">Designed for Spiritual Growth</h3>
           </div>
+          {/* Feature cards grid - 1-on-1 Sessions, Flexible Timing, Certified Qaris */}
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { icon: Users, title: "1-on-1 Sessions", desc: "Get undivided attention from your tutor with private classes tailored to your pace." },

@@ -133,20 +133,6 @@ export const Courses = () => {
 
   return (
     <main className="flex-1 min-h-screen bg-slate-50">
-      {/* Hero Section */}
-      <section className="bg-linear-to-br from-primary via-primary/90 to-primary/80 py-16 px-6 md:px-20 text-white">
-        <div className="mx-auto max-w-5xl">
-          <div className="flex items-center gap-3 mb-6">
-            <BookOpen className="size-8" />
-            <span className="text-sm font-bold uppercase tracking-wider text-primary/90">Explore Our Courses</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-black mb-4">Quranic Learning Courses</h1>
-          <p className="text-lg text-primary/90 leading-relaxed max-w-2xl">
-            Choose from our comprehensive collection of Quranic studies courses designed for all levels, from complete beginners to advanced learners.
-          </p>
-        </div>
-      </section>
-
       {/* Search and Filter Section */}
       <section className="bg-white sticky top-0 z-40 shadow-sm py-6 px-6 md:px-20">
         <div className="mx-auto max-w-5xl">

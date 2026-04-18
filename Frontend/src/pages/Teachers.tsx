@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Star, Award, Search, Filter, MessageSquare } from 'lucide-react';
 import { View } from '../types';
+import { Navbar, Footer } from '../components/Layout';
 
 export const Teachers = () => {
   const navigate = useNavigate();
@@ -129,21 +130,9 @@ export const Teachers = () => {
   ];
 
   return (
-    <main className="flex-1 min-h-screen bg-slate-50">
-      {/* Hero Section */}
-      <section className="bg-linear-to-br from-primary via-primary/90 to-primary/80 py-16 px-6 md:px-20 text-white">
-        <div className="mx-auto max-w-5xl">
-          <div className="flex items-center gap-3 mb-6">
-            <Award className="size-8" />
-            <span className="text-sm font-bold uppercase tracking-wider text-primary/90">Find Your Perfect Tutor</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-black mb-4">Connect with Expert Teachers</h1>
-          <p className="text-lg text-primary/90 leading-relaxed max-w-2xl">
-            Browse our verified instructors with certifications and years of experience. Start your personalized learning journey today.
-          </p>
-        </div>
-      </section>
-
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1 bg-slate-50">
       {/* Search and Filter Section */}
       <section className="bg-white sticky top-0 z-40 shadow-sm py-6 px-6 md:px-20">
         <div className="mx-auto max-w-5xl">
@@ -252,20 +241,8 @@ export const Teachers = () => {
           )}
         </div>
       </section>
-
-      {/* CTA Section */}
-      <section className="bg-linear-to-r from-primary to-primary/80 py-12 px-6 md:px-20 text-center text-white">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="text-3xl font-bold mb-4">Become a Teacher</h2>
-          <p className="mb-8 text-primary/90">Share your expertise and help students learn the Quran</p>
-          <button
-            onClick={() => navigate('/role-selection')}
-            className="bg-white text-primary px-8 py-3 rounded-full font-bold hover:bg-slate-50 transition-all shadow-lg"
-          >
-            Join As a Teacher
-          </button>
-        </div>
-      </section>
-    </main>
+      </main>
+      <Footer />
+    </div>
   );
 };

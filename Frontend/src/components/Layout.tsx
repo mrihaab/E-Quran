@@ -18,7 +18,9 @@ export const Navbar = () => {
     || currentPath.includes('/classes')
     || currentPath.includes('/messages')
     || currentPath.includes('/settings')
+    || currentPath === '/courses'
     || currentPath === '/find-teacher'
+    || currentPath === '/teachers'
     || currentPath === '/sessions'
     || currentPath === '/flexible'
     || currentPath === '/certified-qaris'
@@ -30,7 +32,6 @@ export const Navbar = () => {
 
   const navItems = [
     { label: 'Home', path: '/' },
-    { label: 'Courses', path: '/courses' },
     { label: 'About', path: '/about' },
     { label: 'Contact', path: '/contact' }
   ];
@@ -136,7 +137,7 @@ export const Navbar = () => {
 export const Footer = () => {
   const location = useLocation();
   const currentView = location.pathname.slice(1); // remove leading /
-  const isHidden = currentView.includes('dashboard') || currentView.includes('classes') || currentView.includes('messages') || currentView.includes('settings') || currentView === 'student-payment' || currentView === 'parent-payment' || currentView === 'teacher-payment' || currentView === 'parent-student-payment' || currentView === 'teacher-receive-payment' || currentView === 'sessions' || currentView === 'flexible' || currentView === 'certified-qaris' || currentView === 'find-teacher' || currentView.includes('admin-') || currentView.includes('register') || currentView.startsWith('auth') || currentView.startsWith('role-selection');
+  const isHidden = currentView.includes('dashboard') || currentView.includes('classes') || currentView.includes('messages') || currentView.includes('settings') || currentView === 'student-payment' || currentView === 'parent-payment' || currentView === 'teacher-payment' || currentView === 'parent-student-payment' || currentView === 'teacher-receive-payment' || currentView === 'sessions' || currentView === 'flexible' || currentView === 'certified-qaris' || currentView === 'find-teacher' || currentView === 'teachers' || currentView === 'courses' || currentView.includes('admin-') || currentView.includes('register') || currentView.startsWith('auth') || currentView.startsWith('role-selection');
   
   if (isHidden) return null;
 
