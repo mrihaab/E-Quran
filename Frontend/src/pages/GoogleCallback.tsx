@@ -12,6 +12,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   account_deactivated: 'Your account has been deactivated. Please contact support.',
   admin_pending_approval: 'Your admin account is pending approval from an existing admin.',
   google_auth_failed: 'Google authentication failed. Please try again.',
+  wrong_portal: 'You are trying to login through the wrong portal. Please use your correct role-specific login page.',
 };
 
 export const GoogleCallback = () => {
@@ -21,25 +22,51 @@ export const GoogleCallback = () => {
   const { addToast } = useToast();
   const [statusMessage, setStatusMessage] = useState('Completing login...');
 
+  const resolveApprovalStatus = (tokenData: any): 'approved' | 'pending' | 'rejected' | 'suspended' => {
+    const status = (tokenData?.approvalStatus || tokenData?.approval_status || '').toString().toLowerCase();
+    if (status === 'approved' || status === 'pending' || status === 'rejected' || status === 'suspended') {
+      return status;
+    }
+    if (tokenData?.is_approved === true || tokenData?.isApproved === true) {
+      return 'approved';
+    }
+    return 'pending';
+  };
+
   useEffect(() => {
     const accessToken = searchParams.get('accessToken');
     const refreshToken = searchParams.get('refreshToken');
     const error = searchParams.get('error');
+    const actualRole = searchParams.get('actualRole');
+    const attemptedRole = searchParams.get('attemptedRole');
+    const urlRole = searchParams.get('role');
 
     if (error) {
-      const message = ERROR_MESSAGES[error] || 'Google authentication failed. Please try again.';
+      // For wrong_portal, redirect BACK to attempted role's login with error params
+      if (error === 'wrong_portal' && actualRole && attemptedRole) {
+        // Redirect to attempted role's login page (not actual role) with error toast
+        navigate(`/auth/${attemptedRole}?intent=login&googleError=wrong_portal&actualRole=${actualRole}`);
+        return;
+      }
+      
+      // Handle user_not_found - redirect to signup
+      if (error === 'user_not_found') {
+        addToast('error', 'No account found', 'No account found. Please register first.');
+        navigate('/role-selection?intent=signup');
+        return;
+      }
+      
+      let message = ERROR_MESSAGES[error] || 'Google authentication failed. Please try again.';
       addToast('error', 'Authentication Failed', message);
 
-      // Special case: redirect to correct page based on error
+      // Other errors: redirect to role-selection after delay
       setTimeout(() => {
-        if (error === 'user_not_found') {
-          navigate('/role-selection?intent=signup');
-        } else if (error === 'admin_pending_approval') {
+        if (error === 'admin_pending_approval') {
           navigate('/role-selection?intent=login');
         } else {
           navigate('/role-selection?intent=login');
         }
-      }, 2000);
+      }, 3000);
       return;
     }
 
@@ -60,25 +87,45 @@ export const GoogleCallback = () => {
             .join('')
         );
         const tokenData = JSON.parse(jsonPayload);
+        
+        // Use role from URL if available, otherwise from token
+        const userRole = (urlRole || tokenData.role) as UserRole;
+        
+        console.log(`[GOOGLE CALLBACK DEBUG] URL role: ${urlRole}, Token role: ${tokenData.role}, Using: ${userRole}`);
+
+        // STRICT ROLE VALIDATION: Compare token role with URL role (if provided)
+        if (urlRole && tokenData.role !== urlRole) {
+          addToast('error', 'Access Denied', `This email is registered as a ${tokenData.role}. Please use the correct login portal.`);
+          // Redirect back to attempted role's login page
+          navigate(`/auth/${urlRole}?intent=login`);
+          return;
+        }
 
         // Dispatch user to Redux store (persisted to localStorage by authSlice)
         dispatch(login({
           id: tokenData.id,
           name: tokenData.name || tokenData.full_name,
           email: tokenData.email,
-          role: tokenData.role as UserRole,
+          role: userRole,
+          approvalStatus: resolveApprovalStatus(tokenData),
           profileImage: tokenData.profileImage || null,
         }));
 
         setStatusMessage('Welcome! Redirecting...');
         addToast('success', 'Login Successful!', `Welcome, ${tokenData.name || 'User'}!`);
 
-        // Navigate to role-specific dashboard
+        // Navigate to role-specific dashboard based on userRole
         setTimeout(() => {
-          if (tokenData.role === 'student') navigate('/student-dashboard');
-          else if (tokenData.role === 'teacher') navigate('/teacher-dashboard');
-          else if (tokenData.role === 'parent') navigate('/parent-dashboard');
-          else if (tokenData.role === 'admin') navigate('/admin-dashboard');
+          const approvalStatus = resolveApprovalStatus(tokenData);
+          if (approvalStatus !== 'approved') {
+            navigate('/pending-approval');
+            return;
+          }
+
+          if (userRole === 'student') navigate('/student-dashboard');
+          else if (userRole === 'teacher') navigate('/teacher-dashboard');
+          else if (userRole === 'parent') navigate('/parent-dashboard');
+          else if (userRole === 'admin') navigate('/admin-dashboard');
           else navigate('/');
         }, 1000);
       } catch (decodeErr) {

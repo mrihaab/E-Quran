@@ -8,6 +8,8 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./middleware/errorMiddleware');
+const zeroTrustGuard = require('./middleware/zeroTrustGuard');
+const zeroTrustEnforcer = require('./middleware/zeroTrustEnforcer');
 const { swaggerUi, specs } = require('./config/swagger');
 require('dotenv').config();
 
@@ -82,6 +84,10 @@ require('./config/db');
 
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+// Global zero-trust policy audit (warning-only; non-blocking).
+app.use(zeroTrustGuard);
+app.use(zeroTrustEnforcer);
 
 // ==================== ROUTES ====================
 app.use('/api/auth', require('./routes/auth'));

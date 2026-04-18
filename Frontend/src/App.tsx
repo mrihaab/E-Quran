@@ -37,6 +37,7 @@ import { AdminApproval } from './pages/AdminApproval';
 import { AdminContactMessages } from './pages/AdminContactMessages';
 import { TeacherApproval } from './pages/TeacherApproval';
 import { ParentActivation } from './pages/ParentActivation';
+import { PendingApproval } from './pages/PendingApproval';
 import { ToastProvider } from './contexts/ToastContext';
 import { ToastContainer } from './components/ToastContainer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -68,6 +69,18 @@ export default function App() {
             
             {/* Parent Invitation Activation */}
             <Route path="/parent/activate/:token" element={<ParentActivation />} />
+            <Route path="/pending-approval" element={<PendingApproval />} />
+            <Route
+              path="/access-denied"
+              element={
+                <div className="min-h-[60vh] flex items-center justify-center px-4">
+                  <div className="max-w-xl w-full bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center">
+                    <h1 className="text-2xl font-bold text-slate-900 mb-3">Access Denied</h1>
+                    <p className="text-slate-600">Your account cannot access this resource.</p>
+                  </div>
+                </div>
+              }
+            />
             
             {/* Admin Approval Workflow */}
             <Route

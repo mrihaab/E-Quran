@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { verifyToken } = require('../middleware/auth');
+const authGuard = require('../middleware/authGuard');
+const approvalMiddleware = require('../middleware/approvalMiddleware');
 const { sendResponse } = require('../utils/responseHandler');
 
 // ==================== STUDENT DASHBOARD STATS ====================
-router.get('/student', verifyToken, async (req, res, next) => {
+router.get('/student', verifyToken, authGuard, approvalMiddleware, async (req, res, next) => {
   try {
     const studentId = req.user.id;
 
@@ -112,7 +114,7 @@ router.get('/student', verifyToken, async (req, res, next) => {
 });
 
 // ==================== TEACHER DASHBOARD STATS ====================
-router.get('/teacher', verifyToken, async (req, res, next) => {
+router.get('/teacher', verifyToken, authGuard, approvalMiddleware, async (req, res, next) => {
   try {
     const teacherId = req.user.id;
 
@@ -216,7 +218,7 @@ router.get('/teacher', verifyToken, async (req, res, next) => {
 });
 
 // ==================== PARENT DASHBOARD STATS ====================
-router.get('/parent', verifyToken, async (req, res, next) => {
+router.get('/parent', verifyToken, authGuard, approvalMiddleware, async (req, res, next) => {
   try {
     const parentId = req.user.id;
 

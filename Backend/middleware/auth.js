@@ -36,7 +36,10 @@ function generateRefreshToken(user) {
   );
 }
 
-// Verify JWT token middleware
+// Verify JWT token middleware.
+// Responsibility: authenticate token and attach decoded identity to req.user.
+// Non-responsibilities: no req.user normalization, no approval policy enforcement.
+// Downstream middleware (e.g., authGuard / future approvalMiddleware) handles those layers.
 function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN

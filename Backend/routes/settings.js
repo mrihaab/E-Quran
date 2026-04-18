@@ -2,9 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { verifyToken } = require('../middleware/auth');
+const authGuard = require('../middleware/authGuard');
+const approvalMiddleware = require('../middleware/approvalMiddleware');
+const { requireOwnershipOrRole } = require('../middleware/ownershipMiddleware');
 
 // ==================== GET SETTINGS ====================
-router.get('/:userId', verifyToken, async (req, res) => {
+router.get('/:userId', verifyToken, authGuard, approvalMiddleware, requireOwnershipOrRole({ paramKeys: ['userId'] }), async (req, res) => {
   try {
     const [settings] = await db.query('SELECT * FROM settings WHERE user_id = ?', [req.params.userId]);
 
@@ -30,7 +33,7 @@ router.get('/:userId', verifyToken, async (req, res) => {
 });
 
 // ==================== UPDATE SETTINGS ====================
-router.put('/:userId', verifyToken, async (req, res) => {
+router.put('/:userId', verifyToken, authGuard, approvalMiddleware, async (req, res) => {
   try {
     const userId = parseInt(req.params.userId);
 

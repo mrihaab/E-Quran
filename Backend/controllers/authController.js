@@ -6,6 +6,7 @@ const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailServi
 const { createOTP, verifyOTP: verifyOTPService } = require('../services/otpService');
 const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
+const { logAuditEvent } = require('../middleware/auditLogger');
 const logger = require('../utils/logger');
 
 // ============================================
@@ -80,6 +81,41 @@ const verifyPasswordResetOTP = async (email, otp) => {
   await db.query('UPDATE password_reset_tokens SET is_used = 1 WHERE id = ?', [record.id]);
   
   return { valid: true, message: 'OTP verified successfully.' };
+};
+
+const safePersistRefreshToken = async ({ userId, token, expiresAt, req }) => {
+  const ipAddress = req?.ip || null;
+  const userAgent = req?.headers?.['user-agent'] || 'unknown';
+
+  try {
+    await db.query(
+      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info, last_used_at, ip_address, user_agent) VALUES (?, ?, ?, ?, NOW(), ?, ?)',
+      [userId, token, expiresAt, userAgent, ipAddress, userAgent]
+    );
+  } catch (error) {
+    try {
+      await db.query(
+        'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
+        [userId, token, expiresAt, userAgent]
+      );
+    } catch (_) {
+      throw error;
+    }
+  }
+};
+
+const safeTrackRefreshTokenUsage = async ({ refreshToken, req }) => {
+  const ipAddress = req?.ip || null;
+  const userAgent = req?.headers?.['user-agent'] || 'unknown';
+
+  try {
+    await db.query(
+      'UPDATE refresh_tokens SET last_used_at = NOW(), ip_address = ?, user_agent = ? WHERE token = ?',
+      [ipAddress, userAgent, refreshToken]
+    );
+  } catch (_) {
+    // Optional metadata columns may not exist; silently continue.
+  }
 };
 
 // ============================================
@@ -204,7 +240,7 @@ exports.register = async (req, res, next) => {
 // ============================================
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, portalRole } = req.body;
 
     // Check if user exists - MUST be registered first
     const [users] = await db.query(
@@ -214,6 +250,11 @@ exports.login = async (req, res, next) => {
 
     if (users.length === 0) {
       // User not registered
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'user_not_registered', email: email || null }
+      });
       return res.status(401).json({
         success: false,
         message: 'Account not found. Please register first.',
@@ -225,7 +266,24 @@ exports.login = async (req, res, next) => {
     const user = users[0];
     
     // DEBUG: Log user role
-    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}`);
+    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}, Portal: ${portalRole}`);
+    
+    // STRICT ROLE VALIDATION: Check if user is logging in through correct portal
+    if (portalRole && portalRole !== user.role) {
+      console.log(`[LOGIN DEBUG] ROLE MISMATCH: ${email} is ${user.role} but tried ${portalRole}`);
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'wrong_portal', email: email || null, actualRole: user.role, attemptedRole: portalRole }
+      });
+      return res.status(403).json({
+        success: false,
+        message: `This email is registered as a ${user.role}. Please use the correct login portal.`,
+        code: 'WRONG_PORTAL',
+        actualRole: user.role,
+        attemptedRole: portalRole
+      });
+    }
 
     // Check if account is active
     if (user.status !== 'active') {
@@ -234,6 +292,11 @@ exports.login = async (req, res, next) => {
 
     // Check if admin is approved
     if (user.role === 'admin' && user.is_approved === 0) {
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'admin_pending_approval', userId: user.id, role: user.role }
+      });
       return res.status(403).json({
         success: false,
         message: 'Your admin account is pending approval. Please wait for an existing admin to approve your request.',
@@ -244,6 +307,11 @@ exports.login = async (req, res, next) => {
 
     // Check if user registered via Google OAuth only (no password set)
     if (user.password_hash === 'google_oauth' || user.password_hash === 'PREDEFINED_ADMIN') {
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'google_account_no_password', userId: user.id, email: user.email }
+      });
       return res.status(401).json({
         success: false,
         message: 'This account was created via Google. Please use "Continue with Google" to login, or use Forgot Password to set a password.',
@@ -256,6 +324,11 @@ exports.login = async (req, res, next) => {
     // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'invalid_password', userId: user.id, email: user.email }
+      });
       return res.status(401).json({
         success: false,
         message: 'Invalid password. Please try again or use Forgot Password.',
@@ -266,6 +339,11 @@ exports.login = async (req, res, next) => {
 
     // Check if email is verified
     if (!user.is_verified) {
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'failed',
+        metadata: { reason: 'email_unverified', userId: user.id, email: user.email }
+      });
       return res.status(403).json({ 
         success: false,
         message: 'Please verify your email address before logging in.',
@@ -282,12 +360,19 @@ exports.login = async (req, res, next) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    await safePersistRefreshToken({
+      userId: user.id,
+      token: refreshToken,
+      expiresAt,
+      req
+    });
 
     logger.info(`User logged in: ${email}`);
+    logAuditEvent(req, {
+      action: 'login',
+      status: 'success',
+      metadata: { userId: user.id, role: user.role, loginType: 'password' }
+    });
     sendResponse(res, 200, {
       user: { id: user.id, name: user.full_name, email: user.email, role: user.role, profileImage: user.profile_image },
       accessToken,
@@ -334,19 +419,38 @@ exports.googleCallback = async (req, res) => {
         return sendHtmlRedirect(`${FRONTEND_URL}/login?error=admin_pending_approval`);
       }
 
+      // STRICT ROLE CHECK: Verify user is logging in through correct portal
+      const requestedRole = req.oauthRole; // Role from the login portal
+      const actualRole = dbUser.role; // Role from database
+      
+      console.log(`[GOOGLE AUTH DEBUG] User: ${dbUser.email}, Requested role: ${requestedRole}, Actual role: ${actualRole}`);
+      
+      if (requestedRole && requestedRole !== actualRole) {
+        // User is trying to login through wrong portal - redirect back to attempted role's form
+        console.log(`[GOOGLE AUTH DEBUG] Role mismatch! User ${dbUser.email} tried to login as ${requestedRole} but is actually ${actualRole}`);
+        return sendHtmlRedirect(`${FRONTEND_URL}/auth/${requestedRole}?intent=login&error=wrong_portal&actualRole=${actualRole}`);
+      }
+
       const accessToken = generateToken(dbUser);
       const refreshToken = generateRefreshToken(dbUser);
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
       
-      await db.query(
-        'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-        [dbUser.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-      );
+      await safePersistRefreshToken({
+        userId: dbUser.id,
+        token: refreshToken,
+        expiresAt,
+        req
+      });
 
-      logger.info(`Google login successful: ${dbUser.email}`);
-      return sendHtmlRedirect(`${FRONTEND_URL}/auth/google/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`);
+      logger.info(`Google login successful: ${dbUser.email}, role: ${actualRole}`);
+      logAuditEvent(req, {
+        action: 'login',
+        status: 'success',
+        metadata: { userId: dbUser.id, role: actualRole, loginType: 'google' }
+      });
+      return sendHtmlRedirect(`${FRONTEND_URL}/auth/google/callback?accessToken=${accessToken}&refreshToken=${refreshToken}&role=${actualRole}`);
     }
 
     if (user.isNewUser) {
@@ -683,10 +787,12 @@ exports.completeGoogleRegistration = async (req, res, next) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [userId, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    await safePersistRefreshToken({
+      userId,
+      token: refreshToken,
+      expiresAt,
+      req
+    });
 
     logger.info(`Google registration completed: ${email}, role: ${role}`);
     sendResponse(res, 201, {
@@ -717,10 +823,17 @@ exports.refreshToken = async (req, res, next) => {
       throw new ApiError(401, 'Invalid or expired refresh token.', 'INVALID_REFRESH_TOKEN');
     }
 
+    await safeTrackRefreshTokenUsage({ refreshToken, req });
+
     const [users] = await db.query('SELECT * FROM users WHERE id = ?', [storedToken[0].user_id]);
     if (users.length === 0) throw new ApiError(401, 'User no longer exists.', 'USER_NOT_FOUND');
 
     const newAccessToken = generateToken(users[0]);
+    logAuditEvent(req, {
+      action: 'token_refresh',
+      status: 'success',
+      metadata: { userId: users[0].id, role: users[0].role }
+    });
     sendResponse(res, 200, { accessToken: newAccessToken });
   } catch (error) {
     next(error);
@@ -733,6 +846,11 @@ exports.logout = async (req, res, next) => {
     if (refreshToken) {
       await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
     }
+    logAuditEvent(req, {
+      action: 'logout',
+      status: 'success',
+      metadata: { refreshTokenProvided: Boolean(refreshToken) }
+    });
     sendResponse(res, 200, {}, 'Logged out successfully.');
   } catch (error) {
     next(error);
@@ -785,7 +903,7 @@ exports.verifyOTP = async (req, res, next) => {
     }
 
     const result = await verifyOTPService(email, otp);
-    
+
     if (!result.valid) {
       throw new ApiError(400, result.message, 'INVALID_OTP');
     }
@@ -794,6 +912,9 @@ exports.verifyOTP = async (req, res, next) => {
 
     const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = users[0];
+
+    // DEBUG: Log user role being returned
+    console.log(`[VERIFY OTP DEBUG] Email: ${email}, Role from DB: ${user.role}`);
 
     // If admin not approved, return without tokens
     if (user.role === 'admin' && user.is_approved === 0) {
@@ -810,10 +931,12 @@ exports.verifyOTP = async (req, res, next) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    await safePersistRefreshToken({
+      userId: user.id,
+      token: refreshToken,
+      expiresAt,
+      req
+    });
 
     logger.info(`Email verified with OTP: ${email}`);
     sendResponse(res, 200, {

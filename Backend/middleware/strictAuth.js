@@ -7,6 +7,12 @@
  * 3. Each portal accepts ONLY its own role
  * 4. Wrong portal login = immediate rejection
  * 5. Google login must also respect approval system
+ *
+ * Architecture note:
+ * - This file performs authentication and strict approval/portal checks.
+ * - Identity normalization is handled separately by authGuard.
+ * - approvalStatus enforcement here is local to strictAuth routes only.
+ * - Future centralized approval policy should be implemented in approvalMiddleware.
  */
 
 const jwt = require('jsonwebtoken');

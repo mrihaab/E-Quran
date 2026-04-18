@@ -39,6 +39,18 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ type?: ToastType; title?: string; message?: string }>;
+      const detail = customEvent.detail || {};
+      if (!detail.title) return;
+      addToast(detail.type || 'error', detail.title, detail.message);
+    };
+
+    window.addEventListener('app:toast', handler as EventListener);
+    return () => window.removeEventListener('app:toast', handler as EventListener);
+  }, [addToast]);
+
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
       {children}

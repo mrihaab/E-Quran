@@ -25,9 +25,28 @@ export const AuthPage = () => {
   const { addToast } = useToast();
 
   const validRoles = ['student', 'teacher', 'parent', 'admin'];
-  
+
+  // DEBUG: Log which role portal is being rendered
+  console.log(`[AUTH PAGE DEBUG] URL Role from useParams: ${role}`);
+
+  // Check for Google Sign-In errors in URL
+  useEffect(() => {
+    const error = searchParams.get('error');
+    const googleError = searchParams.get('googleError');
+    const actualRole = searchParams.get('actualRole');
+
+    // Handle both 'error' (from backend redirect) and 'googleError' (from frontend)
+    if ((error === 'wrong_portal' || googleError === 'wrong_portal') && actualRole) {
+      // Show toast notification for Google Sign-In role mismatch
+      addToast('error', 'Access Denied', `This email is registered as a ${actualRole}. Please use the correct login portal.`);
+      // Clear error params from URL without navigating
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, addToast]);
+
   // Make sure role is valid
   useEffect(() => {
+    console.log(`[AUTH PAGE DEBUG] useEffect - role: ${role}, valid: ${validRoles.includes(role || '')}`);
     if (!role || !validRoles.includes(role)) {
       navigate('/role-selection');
     }
@@ -40,17 +59,21 @@ export const AuthPage = () => {
     setSearchParams({ intent: newIntent });
   };
 
+  const resolveApprovalStatus = (user: any): 'approved' | 'pending' | 'rejected' | 'suspended' => {
+    const status = (user?.approvalStatus || user?.approval_status || '').toString().toLowerCase();
+    if (status === 'approved' || status === 'pending' || status === 'rejected' || status === 'suspended') {
+      return status;
+    }
+    if (user?.isApproved === true || user?.is_approved === true) {
+      return 'approved';
+    }
+    return 'pending';
+  };
+
   const handleLogin = async (values: { email: string; password: string }, setSubmitting: (b: boolean) => void) => {
     try {
       // apiLogin returns { user, accessToken, refreshToken } and stores tokens automatically
       const data = await apiLogin(values.email, values.password);
-
-      // Verify that the logged-in user's role matches the portal they used
-      if (data.user && data.user.role !== role) {
-        addToast('error', 'Access Denied', `You are registered as a ${data.user.role}, but tried to login as a ${role}. Please go to the correct portal.`);
-        setSubmitting(false);
-        return;
-      }
 
       // Dispatch to Redux — tokens are already stored in localStorage by apiLogin
       dispatch(loginAction({
@@ -58,12 +81,20 @@ export const AuthPage = () => {
         name: data.user.name,
         email: data.user.email,
         role: data.user.role as UserRole,
+        approvalStatus: resolveApprovalStatus(data.user),
         profileImage: data.user.profileImage || null,
       }));
 
       addToast('success', 'Login Successful!', `Welcome back, ${data.user.name}!`);
 
+      // Navigate to role-specific dashboard (backend already validated role)
       setTimeout(() => {
+        const approvalStatus = resolveApprovalStatus(data.user);
+        if (approvalStatus !== 'approved') {
+          navigate('/pending-approval');
+          return;
+        }
+
         if (data.user.role === 'student') navigate('/student-dashboard');
         else if (data.user.role === 'teacher') navigate('/teacher-dashboard');
         else if (data.user.role === 'parent') navigate('/parent-dashboard');
@@ -72,7 +103,10 @@ export const AuthPage = () => {
       }, 500);
     } catch (error: any) {
       // Handle specific error cases with targeted messages
-      if (error.verificationRequired) {
+      if (error.code === 'USER_NOT_REGISTERED') {
+        addToast('warning', 'Not Registered', error.message);
+        setTimeout(() => navigate(`/auth/${role}?intent=signup`), 1500);
+      } else if (error.verificationRequired) {
         addToast('warning', 'Email Not Verified', `${error.message} Redirecting to verification...`);
         setTimeout(() => navigate(`/auth/${role}?intent=verify&email=${encodeURIComponent(values.email)}`), 1500);
       } else if (error.isGoogleAccount) {
@@ -237,7 +271,6 @@ export const AuthPage = () => {
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
               >
-                {/* Dynamically render the proper registration form */}
                 {role === 'student' && <RegisterStudent isEmbedded={true} />}
                 {role === 'teacher' && <RegisterTeacher isEmbedded={true} />}
                 {role === 'parent' && <RegisterParent isEmbedded={true} />}

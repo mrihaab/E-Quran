@@ -1,4 +1,7 @@
 // ==================== API BASE URL ====================
+import { handleAuthError } from '../lib/authErrorHandler';
+
+// ==================== API BASE URL ====================
 const API_BASE = '/api';
 
 // ==================== TOKEN MANAGEMENT ====================
@@ -34,6 +37,15 @@ let refreshQueue: Array<(token: string) => void> = [];
 function processQueue(token: string | null) {
   refreshQueue.forEach(callback => callback(token || ''));
   refreshQueue = [];
+}
+
+function runAuthErrorHandler(status: number, data: any, requestUrl: string): void {
+  handleAuthError({
+    status,
+    code: data?.code,
+    message: data?.message,
+    requestUrl: `${API_BASE}${requestUrl}`
+  });
 }
 
 // ==================== GENERIC FETCH WRAPPER ====================
@@ -100,6 +112,10 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
       }
     }
 
+    if (res.status === 401 || res.status === 403) {
+      runAuthErrorHandler(res.status, data, url);
+    }
+
     if (!res.ok || data.success === false) {
       const error: any = new Error(data.message || 'Something went wrong');
       error.code = data.code;
@@ -125,6 +141,9 @@ export async function apiRegister(payload: any) {
     body: JSON.stringify(payload),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/register');
+  }
   if (!response.ok || data.success === false) {
     const error: any = new Error(data.message || 'Registration failed');
     error.code = data.code;
@@ -133,13 +152,16 @@ export async function apiRegister(payload: any) {
   return data.data || data;
 }
 
-export async function apiLogin(email: string, password: string) {
+export async function apiLogin(email: string, password: string, portalRole?: string) {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, portalRole }),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/login');
+  }
 
   if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);
@@ -148,6 +170,8 @@ export async function apiLogin(email: string, password: string) {
     // Pass through all error details for specific error handling
     const error: any = new Error(data.message || 'Login failed');
     error.code = data.code;
+    error.actualRole = data.actualRole;
+    error.attemptedRole = data.attemptedRole;
     error.showForgotPassword = data.showForgotPassword;
     error.isGoogleAccount = data.isGoogleAccount;
     error.requiresRegistration = data.requiresRegistration;
@@ -186,13 +210,18 @@ export async function apiSendOTP(email: string) {
 }
 
 export async function apiVerifyOTP(email: string, otp: string) {
+  console.log(`[API DEBUG] apiVerifyOTP called for email: ${email}`);
   const response = await fetch(`${API_BASE}/auth/verify-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, otp }),
   });
   const data = await response.json();
-
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/verify-otp');
+  }
+  console.log(`[API DEBUG] apiVerifyOTP response:`, data);
+  console.log(`[API DEBUG] apiVerifyOTP user role:`, data?.data?.user?.role);
   if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);
   }
@@ -207,6 +236,9 @@ export async function apiForgotPassword(email: string) {
     body: JSON.stringify({ email }),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/forgot-password');
+  }
   if (!response.ok || data.success === false) {
     throw new Error(data.message || 'Failed to send reset OTP');
   }
@@ -220,6 +252,9 @@ export async function apiVerifyResetOTP(email: string, otp: string) {
     body: JSON.stringify({ email, otp }),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/verify-reset-otp');
+  }
   if (!response.ok || data.success === false) {
     throw new Error(data.message || 'Invalid OTP');
   }
@@ -233,6 +268,9 @@ export async function apiResetPassword(resetToken: string, newPassword: string) 
     body: JSON.stringify({ resetToken, newPassword }),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/reset-password');
+  }
   if (!response.ok || data.success === false) {
     throw new Error(data.message || 'Password reset failed');
   }
@@ -266,6 +304,9 @@ export async function apiCompleteGoogleRegistration(payload: {
     body: JSON.stringify(payload),
   });
   const data = await response.json();
+  if (response.status === 401 || response.status === 403) {
+    runAuthErrorHandler(response.status, data, '/auth/google/complete');
+  }
 
   if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);

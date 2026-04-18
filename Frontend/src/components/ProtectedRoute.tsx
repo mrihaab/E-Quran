@@ -17,14 +17,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   }
 
   if (!allowedRoles.includes(user.role)) {
-    // Redirect to their actual dashboard instead of /unauthorized
-    const dashboardMap: Record<string, string> = {
-      student: '/student-dashboard',
-      teacher: '/teacher-dashboard',
-      parent: '/parent-dashboard',
-      admin: '/admin-dashboard',
-    };
-    return <Navigate to={dashboardMap[user.role] || '/'} replace />;
+    // STRICT ROLE ENFORCEMENT: Do not auto-redirect to user's dashboard
+    // Instead, show an error message by redirecting to role-selection with an error
+    console.error(`[PROTECTED ROUTE] Access denied: User role '${user.role}' tried to access '${allowedRoles.join('/')}' route`);
+    return <Navigate to={`/role-selection?error=wrong_role&actualRole=${user.role}`} replace />;
+  }
+
+  const approvalStatus = user.approvalStatus || 'pending';
+  if (approvalStatus !== 'approved') {
+    if (approvalStatus === 'rejected' || approvalStatus === 'suspended') {
+      return <Navigate to="/access-denied" state={{ from: location }} replace />;
+    }
+    return <Navigate to="/pending-approval" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
