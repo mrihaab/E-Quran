@@ -62,6 +62,17 @@ async function performRoleBasedLogin(req, res, next, expectedRole) {
 
     const user = users[0];
 
+    // Check if Google-only account before comparing a non-hash password value
+    if (user.password_hash === 'google_oauth' || user.password_hash === 'PREDEFINED_ADMIN') {
+      return res.status(401).json({
+        success: false,
+        message: 'This account was created via Google. Please use "Continue with Google" to login, or use Forgot Password to set a password.',
+        code: 'GOOGLE_ACCOUNT_NO_PASSWORD',
+        showForgotPassword: true,
+        isGoogleAccount: true
+      });
+    }
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
@@ -77,16 +88,6 @@ async function performRoleBasedLogin(req, res, next, expectedRole) {
         code: 'EMAIL_UNVERIFIED',
         verificationRequired: true,
         email: user.email
-      });
-    }
-
-    // Check if Google-only account
-    if (user.password_hash === 'google_oauth') {
-      return res.status(401).json({
-        success: false,
-        message: 'This account was created via Google. Please use "Continue with Google" to login.',
-        code: 'GOOGLE_ACCOUNT',
-        showGoogleLogin: true
       });
     }
 

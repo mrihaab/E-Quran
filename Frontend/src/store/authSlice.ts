@@ -1,6 +1,10 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState } from '../types';
-import { removeTokens } from '../api';
+import { apiLogout, removeTokens } from '../api';
+
+export const logoutUser = createAsyncThunk('auth/logoutUser', async () => {
+  await apiLogout();
+});
 
 // redux-persist (in store.ts) handles state persistence automatically.
 // No manual localStorage needed here.
@@ -27,6 +31,17 @@ const authSlice = createSlice({
         state.user = { ...state.user, ...action.payload };
       }
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(logoutUser.fulfilled, (state) => {
+      state.user = null;
+      state.isAuthenticated = false;
+    });
+    builder.addCase(logoutUser.rejected, (state) => {
+      state.user = null;
+      state.isAuthenticated = false;
+      removeTokens();
+    });
   },
 });
 

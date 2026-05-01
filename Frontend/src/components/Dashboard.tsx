@@ -34,7 +34,7 @@ import {
   ProgressBar
 } from './Charts';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { logout } from '../store/authSlice';
+import { logoutUser } from '../store/authSlice';
 import { getStudentDashboardData } from '../api';
 
 export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { currentView: string, userRole?: UserRole, onLogout?: () => void }) => {
@@ -47,7 +47,7 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
   const paymentView = userRole === 'teacher' ? 'teacher-receive-payment' : userRole === 'parent' ? 'parent-payment' : 'student-payment';
 
   const defaultLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     navigate('/');
   };
 
@@ -211,7 +211,7 @@ export const StudentDashboard = () => {
   };
 
   const handleLogout = () => {
-    dispatch(logout());
+    dispatch(logoutUser());
     navigate('/');
   };
 

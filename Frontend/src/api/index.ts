@@ -1,3 +1,5 @@
+import type { UserRole } from '../types';
+
 // ==================== API BASE URL ====================
 const API_BASE = '/api';
 
@@ -133,8 +135,9 @@ export async function apiRegister(payload: any) {
   return data.data || data;
 }
 
-export async function apiLogin(email: string, password: string) {
-  const response = await fetch(`${API_BASE}/auth/login`, {
+export async function apiLogin(email: string, password: string, role?: UserRole) {
+  const loginPath = role ? `/strict-auth/login/${role}` : '/auth/login';
+  const response = await fetch(`${API_BASE}${loginPath}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -151,7 +154,9 @@ export async function apiLogin(email: string, password: string) {
     error.showForgotPassword = data.showForgotPassword;
     error.isGoogleAccount = data.isGoogleAccount;
     error.requiresRegistration = data.requiresRegistration;
-    error.requiresApproval = data.requiresApproval;
+    error.requiresApproval = data.requiresApproval || data.code === 'PENDING_APPROVAL' || data.code === 'APPLICATION_REJECTED';
+    error.approvalStatus = data.approvalStatus;
+    error.rejectionReason = data.rejectionReason;
     error.verificationRequired = data.verificationRequired;
     error.email = data.email;
     throw error;

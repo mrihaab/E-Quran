@@ -43,7 +43,8 @@ export const AuthPage = () => {
   const handleLogin = async (values: { email: string; password: string }, setSubmitting: (b: boolean) => void) => {
     try {
       // apiLogin returns { user, accessToken, refreshToken } and stores tokens automatically
-      const data = await apiLogin(values.email, values.password);
+      const loginRole = role as UserRole;
+      const data = await apiLogin(values.email, values.password, loginRole);
 
       // Verify that the logged-in user's role matches the portal they used
       if (data.user && data.user.role !== role) {

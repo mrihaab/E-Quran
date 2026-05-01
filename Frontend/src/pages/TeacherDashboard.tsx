@@ -10,7 +10,7 @@ import {
   ProgressBar
 } from '../components/Charts';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { logout } from '../store/authSlice';
+import { logoutUser } from '../store/authSlice';
 import { useEffect, useState } from 'react';
 import { getTeacherDashboardData } from '../api';
 
@@ -39,8 +39,8 @@ export const TeacherDashboard = () => {
     navigate(`/${view}`);
   };
 
-  const handleLogout = () => {
-    dispatch(logout());
+  const handleLogout = async () => {
+    await dispatch(logoutUser());
     navigate('/');
   };
 
