@@ -2,8 +2,6 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState } from '../types';
 import { removeTokens } from '../api';
 
-// redux-persist (in store.ts) handles state persistence automatically.
-// No manual localStorage needed here.
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
@@ -27,8 +25,13 @@ const authSlice = createSlice({
         state.user = { ...state.user, ...action.payload };
       }
     },
+    sessionExpired: (state) => {
+      state.user = null;
+      state.isAuthenticated = false;
+      removeTokens();
+    },
   },
 });
 
-export const { login, logout, updateUser } = authSlice.actions;
+export const { login, logout, updateUser, sessionExpired } = authSlice.actions;
 export default authSlice.reducer;

@@ -1,119 +1,176 @@
-// ==================== API BASE URL ====================
 const API_BASE = '/api';
 
 // ==================== TOKEN MANAGEMENT ====================
+const TOKEN_KEY = 'equran_token';
+const REFRESH_TOKEN_KEY = 'equran_refresh_token';
+
 export function getToken(): string | null {
-  return localStorage.getItem('equran_token');
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 export function getRefreshToken(): string | null {
-  return localStorage.getItem('equran_refresh_token');
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 export function setTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem('equran_token', accessToken);
-  localStorage.setItem('equran_refresh_token', refreshToken);
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
 }
 
 export function removeTokens(): void {
-  localStorage.removeItem('equran_token');
-  localStorage.removeItem('equran_refresh_token');
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
-  return token
-    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-    : { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
 }
 
-// Queue for handling multiple requests during a token refresh
+// ==================== TOKEN REFRESH QUEUE ====================
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: Error) => void;
+}> = [];
 
-function processQueue(token: string | null) {
-  refreshQueue.forEach(callback => callback(token || ''));
+function processQueue(error: Error | null, token: string | null) {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token || '');
+  });
   refreshQueue = [];
+}
+
+async function attemptTokenRefresh(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No refresh token available.');
+  }
+
+  const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  const refreshData = await refreshRes.json();
+
+  if (refreshData.success && refreshData.data?.accessToken) {
+    localStorage.setItem(TOKEN_KEY, refreshData.data.accessToken);
+    return refreshData.data.accessToken;
+  }
+
+  throw new Error('Token refresh failed.');
+}
+
+// ==================== API ERROR CLASS ====================
+export class ApiRequestError extends Error {
+  code: string;
+  status: number;
+  showForgotPassword?: boolean;
+  isGoogleAccount?: boolean;
+  requiresRegistration?: boolean;
+  requiresApproval?: boolean;
+  verificationRequired?: boolean;
+  email?: string;
+
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = code;
+    this.status = status;
+  }
 }
 
 // ==================== GENERIC FETCH WRAPPER ====================
 async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       ...options,
-      headers: { ...authHeaders(), ...(options.headers || {}) },
+      headers: { ...authHeaders(), ...(options.headers as Record<string, string> || {}) },
+      signal: controller.signal,
     });
 
-    // Handle Network/Proxy Errors
+    clearTimeout(timeoutId);
+
     if (res.status === 502 || res.status === 504) {
-      throw new Error('Connection refused. Please ensure your backend server is running.');
+      throw new ApiRequestError(
+        'Server is unreachable. Please ensure the backend is running.',
+        'SERVER_UNREACHABLE',
+        res.status
+      );
     }
 
-    const data = await res.json();
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      throw new ApiRequestError('Invalid response from server.', 'PARSE_ERROR', res.status);
+    }
 
-    // HANDLE TOKEN EXPIRATION (Silent Refresh)
     if (res.status === 401 && data.code === 'TOKEN_EXPIRED') {
-      const refreshToken = getRefreshToken();
-      if (!refreshToken) {
-        removeTokens();
-        window.location.href = '/role-selection?intent=login';
-        throw new Error('Session expired. Please login again.');
-      }
-
-      // If already refreshing, wait for it to finish
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          refreshQueue.push((newToken) => {
-            resolve(apiFetch(url, {
-              ...options,
-              headers: { ...options.headers, Authorization: `Bearer ${newToken}` }
-            }));
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({
+            resolve: (newToken) => {
+              resolve(apiFetch(url, {
+                ...options,
+                headers: { ...(options.headers as Record<string, string> || {}), Authorization: `Bearer ${newToken}` },
+              }));
+            },
+            reject,
           });
         });
       }
 
       isRefreshing = true;
       try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken })
-        });
-        const refreshData = await refreshRes.json();
-
-        if (refreshData.success && refreshData.data?.accessToken) {
-          localStorage.setItem('equran_token', refreshData.data.accessToken);
-          isRefreshing = false;
-          processQueue(refreshData.data.accessToken);
-
-          // Retry original request
-          return apiFetch(url, options);
-        } else {
-          throw new Error('Refresh failed');
-        }
+        const newToken = await attemptTokenRefresh();
+        isRefreshing = false;
+        processQueue(null, newToken);
+        return apiFetch(url, options);
       } catch (err) {
         isRefreshing = false;
-        processQueue(null);
+        processQueue(err as Error, null);
         removeTokens();
-        window.location.href = '/role-selection?intent=login';
-        throw new Error('Session expired. Please login again.');
+        window.location.href = '/role-selection?intent=login&reason=session_expired';
+        throw new ApiRequestError('Session expired. Please login again.', 'SESSION_EXPIRED', 401);
       }
     }
 
     if (!res.ok || data.success === false) {
-      const error: any = new Error(data.message || 'Something went wrong');
-      error.code = data.code;
-      error.status = res.status;
+      const error = new ApiRequestError(
+        data.message || 'Something went wrong.',
+        data.code || 'UNKNOWN_ERROR',
+        res.status
+      );
+      error.showForgotPassword = data.showForgotPassword;
+      error.isGoogleAccount = data.isGoogleAccount;
+      error.requiresRegistration = data.requiresRegistration;
+      error.requiresApproval = data.requiresApproval;
+      error.verificationRequired = data.verificationRequired;
+      error.email = data.email;
       throw error;
     }
 
-    // Return the 'data' part of the standardized backend response
     return data.data !== undefined ? data.data : data;
   } catch (error: any) {
-    if (error.name === 'SyntaxError') {
-      throw new Error('Data format error from server.');
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new ApiRequestError('Request timed out. Please try again.', 'TIMEOUT', 408);
     }
-    throw error;
+    if (error instanceof ApiRequestError) throw error;
+    throw new ApiRequestError(
+      error.message || 'Network error. Please check your connection.',
+      'NETWORK_ERROR',
+      0
+    );
   }
 }
 
@@ -126,8 +183,11 @@ export async function apiRegister(payload: any) {
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    const error: any = new Error(data.message || 'Registration failed');
-    error.code = data.code;
+    const error = new ApiRequestError(
+      data.message || 'Registration failed.',
+      data.code || 'REGISTER_FAILED',
+      response.status
+    );
     throw error;
   }
   return data.data || data;
@@ -143,19 +203,21 @@ export async function apiLogin(email: string, password: string) {
 
   if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);
-    return data.data; // { user, accessToken, refreshToken }
-  } else {
-    // Pass through all error details for specific error handling
-    const error: any = new Error(data.message || 'Login failed');
-    error.code = data.code;
-    error.showForgotPassword = data.showForgotPassword;
-    error.isGoogleAccount = data.isGoogleAccount;
-    error.requiresRegistration = data.requiresRegistration;
-    error.requiresApproval = data.requiresApproval;
-    error.verificationRequired = data.verificationRequired;
-    error.email = data.email;
-    throw error;
+    return data.data;
   }
+
+  const error = new ApiRequestError(
+    data.message || 'Login failed.',
+    data.code || 'LOGIN_FAILED',
+    response.status
+  );
+  error.showForgotPassword = data.showForgotPassword;
+  error.isGoogleAccount = data.isGoogleAccount;
+  error.requiresRegistration = data.requiresRegistration;
+  error.requiresApproval = data.requiresApproval;
+  error.verificationRequired = data.verificationRequired;
+  error.email = data.email;
+  throw error;
 }
 
 export async function apiLogout() {
@@ -164,7 +226,7 @@ export async function apiLogout() {
     await fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken })
+      body: JSON.stringify({ refreshToken }),
     });
   } finally {
     removeTokens();
@@ -180,7 +242,7 @@ export async function apiSendOTP(email: string) {
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.message || 'Failed to send OTP');
+    throw new ApiRequestError(data.message || 'Failed to send OTP.', data.code || 'OTP_FAILED', response.status);
   }
   return data.data || data;
 }
@@ -208,7 +270,7 @@ export async function apiForgotPassword(email: string) {
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.message || 'Failed to send reset OTP');
+    throw new ApiRequestError(data.message || 'Failed to send reset OTP.', data.code || 'RESET_FAILED', response.status);
   }
   return data.data || data;
 }
@@ -221,7 +283,7 @@ export async function apiVerifyResetOTP(email: string, otp: string) {
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.message || 'Invalid OTP');
+    throw new ApiRequestError(data.message || 'Invalid OTP.', data.code || 'INVALID_OTP', response.status);
   }
   return data.data || data;
 }
@@ -234,15 +296,15 @@ export async function apiResetPassword(resetToken: string, newPassword: string) 
   });
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.message || 'Password reset failed');
+    throw new ApiRequestError(data.message || 'Password reset failed.', data.code || 'RESET_FAILED', response.status);
   }
   return data.data || data;
 }
 
 // ==================== GOOGLE OAUTH ====================
-// Must point directly to the backend — do NOT use /api proxy path.
-// Google OAuth uses server-side redirects that break through Vite proxy.
-const BACKEND_DIRECT_URL = 'http://localhost:5000';
+const BACKEND_DIRECT_URL = typeof window !== 'undefined'
+  ? `${window.location.protocol}//${window.location.hostname}:5000`
+  : 'http://localhost:5000';
 
 export function getGoogleAuthUrl(role?: string) {
   let url = `${BACKEND_DIRECT_URL}/api/auth/google`;
@@ -342,39 +404,22 @@ export async function unenroll(enrollmentId: number) {
 }
 
 // ==================== MESSAGES ====================
-/**
- * Send a message to a receiver
- */
 export async function sendMessage(receiverId: number, content: string) {
   return apiFetch('/messages', { method: 'POST', body: JSON.stringify({ receiverId, content }) });
 }
 
-/**
- * Get messages between logged-in user and a partner
- * @param partnerId - The ID of the conversation partner
- */
 export async function getMessages(partnerId: number) {
   return apiFetch(`/messages/${partnerId}`);
 }
 
-/**
- * Get all conversations for the logged-in user
- */
 export async function getConversations() {
   return apiFetch('/messages/conversations');
 }
 
-/**
- * Mark all messages from a partner as read
- * @param partnerId - The ID of the message sender (conversation partner)
- */
 export async function markMessageRead(partnerId: number) {
   return apiFetch(`/messages/${partnerId}/read`, { method: 'PUT' });
 }
 
-/**
- * Delete a message
- */
 export async function deleteMessage(messageId: number) {
   return apiFetch(`/messages/${messageId}`, { method: 'DELETE' });
 }
@@ -383,14 +428,14 @@ export async function deleteMessage(messageId: number) {
 export async function createPaymentSession(amount: number, classId: number) {
   return apiFetch('/payments/stripe/create-session', {
     method: 'POST',
-    body: JSON.stringify({ amount, classId })
+    body: JSON.stringify({ amount, classId }),
   });
 }
 
 export async function verifyPayment(sessionId: string) {
   return apiFetch('/payments/stripe/verify', {
     method: 'POST',
-    body: JSON.stringify({ sessionId })
+    body: JSON.stringify({ sessionId }),
   });
 }
 
@@ -457,9 +502,7 @@ export async function updateAdminUser(userId: number, payload: Record<string, an
 }
 
 export async function deleteAdminUser(userId: number) {
-  return apiFetch(`/admin/users/${userId}`, {
-    method: 'DELETE',
-  });
+  return apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
 }
 
 export async function getAdminStats() {
@@ -536,19 +579,17 @@ export async function getContactMessageById(id: number) {
 export async function updateContactMessageStatus(id: number, status: string, adminNotes?: string) {
   return apiFetch(`/contact/admin/messages/${id}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status, adminNotes })
+    body: JSON.stringify({ status, adminNotes }),
   });
 }
 
 export async function replyToContactMessage(id: number, replyMessage: string) {
   return apiFetch(`/contact/admin/messages/${id}/reply`, {
     method: 'POST',
-    body: JSON.stringify({ replyMessage })
+    body: JSON.stringify({ replyMessage }),
   });
 }
 
 export async function deleteContactMessage(id: number) {
-  return apiFetch(`/contact/admin/messages/${id}`, {
-    method: 'DELETE'
-  });
+  return apiFetch(`/contact/admin/messages/${id}`, { method: 'DELETE' });
 }

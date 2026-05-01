@@ -1,14 +1,20 @@
-/**
- * Standard API Response Wrapper
- */
 const sendResponse = (res, statusCode, data = {}, message = 'Success') => {
-  return res.status(statusCode).json({
+  const response = {
+    success: statusCode >= 200 && statusCode < 300,
+    message,
+    data,
+  };
+
+  return res.status(statusCode).json(response);
+};
+
+const sendPaginatedResponse = (res, data, pagination, message = 'Success') => {
+  return res.status(200).json({
     success: true,
     message,
-    data
+    data,
+    pagination,
   });
 };
 
-module.exports = {
-  sendResponse
-};
+module.exports = { sendResponse, sendPaginatedResponse };

@@ -1,45 +1,33 @@
 const db = require('../config/db');
 
-/**
- * GENERIC PAGINATION HELPER
- * @param {string} baseQuery - The SQL query (before LIMIT/OFFSET)
- * @param {Array} params - Parameters for the baseQuery
- * @param {number} page - Page number (1-indexed)
- * @param {number} limit - Items per page
- */
-const getPaginatedRes = async (baseQuery, params, page = 1, limit = 10) => {
-  try {
-    const pageNum = parseInt(page) || 1;
-    const limitNum = parseInt(limit) || 10;
-    const offset = (pageNum - 1) * limitNum;
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
 
-    // Get Total Count
-    // We wrap the baseQuery to get the total count accurately
-    const countQuery = `SELECT COUNT(*) as total FROM (${baseQuery}) as subquery`;
-    const [[{ total }]] = await db.query(countQuery, params);
+const getPaginatedRes = async (baseQuery, params = [], page = DEFAULT_PAGE, limit = DEFAULT_LIMIT) => {
+  const pageNum = Math.max(1, parseInt(page, 10) || DEFAULT_PAGE);
+  const limitNum = Math.min(MAX_LIMIT, Math.max(1, parseInt(limit, 10) || DEFAULT_LIMIT));
+  const offset = (pageNum - 1) * limitNum;
 
-    // Get Paginated Data
-    const dataQuery = `${baseQuery} LIMIT ? OFFSET ?`;
-    const [data] = await db.query(dataQuery, [...params, limitNum, offset]);
+  const countQuery = `SELECT COUNT(*) as total FROM (${baseQuery}) as count_query`;
+  const [[{ total }]] = await db.query(countQuery, params);
 
-    const totalPages = Math.ceil(total / limitNum);
+  const dataQuery = `${baseQuery} LIMIT ? OFFSET ?`;
+  const [data] = await db.query(dataQuery, [...params, limitNum, offset]);
 
-    return {
-      data,
-      metadata: {
-        totalItems: total,
-        totalPages,
-        currentPage: pageNum,
-        itemsPerPage: limitNum,
-        hasNextPage: pageNum < totalPages,
-        hasPrevPage: pageNum > 1
-      }
-    };
-  } catch (error) {
-    throw error;
-  }
+  const totalPages = Math.ceil(total / limitNum);
+
+  return {
+    data,
+    pagination: {
+      total,
+      totalPages,
+      currentPage: pageNum,
+      perPage: limitNum,
+      hasNext: pageNum < totalPages,
+      hasPrev: pageNum > 1,
+    },
+  };
 };
 
-module.exports = {
-  getPaginatedRes
-};
+module.exports = { getPaginatedRes };

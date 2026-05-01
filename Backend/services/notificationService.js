@@ -1,24 +1,20 @@
 const db = require('../config/db');
 const logger = require('../utils/logger');
 
-/**
- * Trigger Notification
- * @param {object} app - Express app instance to get 'io'
- * @param {number} userId - ID of the user to notify
- * @param {string} title - Notification title
- * @param {string} message - Notification content
- * @param {string} type - 'info', 'success', 'warning', 'error'
- */
 const createNotification = async (app, userId, title, message, type = 'info') => {
   try {
+    if (!userId || !title) {
+      logger.warn('Notification skipped: missing userId or title');
+      return false;
+    }
+
     const [result] = await db.query(
       'INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)',
-      [userId, title, message, type]
+      [userId, title, message || '', type]
     );
 
     const notificationId = result.insertId;
-    
-    // Real-time delivery via Socket.io
+
     const io = app.get('io');
     if (io) {
       io.to(`user_${userId}`).emit('notification', {
@@ -26,14 +22,15 @@ const createNotification = async (app, userId, title, message, type = 'info') =>
         title,
         message,
         type,
-        created_at: new Date()
+        is_read: 0,
+        created_at: new Date().toISOString(),
       });
     }
 
-    logger.info(`🔔 Notification Push: User ${userId} | ${title}`);
+    logger.debug(`Notification sent to user ${userId}: ${title}`);
     return true;
   } catch (error) {
-    logger.error('Notification trigger error:', error);
+    logger.error('Notification creation failed:', error.message);
     return false;
   }
 };
