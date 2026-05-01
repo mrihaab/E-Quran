@@ -3,7 +3,7 @@ const router = express.Router();
 const passport = require('../config/passport');
 const authController = require('../controllers/authController');
 
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -100,9 +100,9 @@ router.post('/verify-reset-otp', authController.verifyResetOTP);
 router.post('/reset-password', authController.resetPassword);
 
 // ==================== ADMIN APPROVAL WORKFLOW ====================
-router.get('/admin/requests', verifyToken, authController.getPendingAdminRequests);
-router.post('/admin/requests/:requestId/approve', verifyToken, authController.approveAdminRequest);
-router.post('/admin/requests/:requestId/reject', verifyToken, authController.rejectAdminRequest);
+router.get('/admin/requests', verifyToken, requireRole('admin'), authController.getPendingAdminRequests);
+router.post('/admin/requests/:requestId/approve', verifyToken, requireRole('admin'), authController.approveAdminRequest);
+router.post('/admin/requests/:requestId/reject', verifyToken, requireRole('admin'), authController.rejectAdminRequest);
 
 // Simple in-memory store for role during OAuth (cleared periodically)
 const oauthRoleStore = new Map();

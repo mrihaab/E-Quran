@@ -35,7 +35,7 @@ import {
 } from './Charts';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { logout } from '../store/authSlice';
-import { getStudentDashboardData } from '../api';
+import { apiLogout, getStudentDashboardData } from '../api';
 
 export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { currentView: string, userRole?: UserRole, onLogout?: () => void }) => {
   const navigate = useNavigate();
@@ -46,7 +46,12 @@ export const Sidebar = ({ currentView, userRole = 'student', onLogout }: { curre
   const settingsView = userRole === 'teacher' ? 'teacher-settings' : userRole === 'parent' ? 'parent-settings' : 'student-settings';
   const paymentView = userRole === 'teacher' ? 'teacher-receive-payment' : userRole === 'parent' ? 'parent-payment' : 'student-payment';
 
-  const defaultLogout = () => {
+  const defaultLogout = async () => {
+    try {
+      await apiLogout();
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    }
     dispatch(logout());
     navigate('/');
   };
@@ -210,7 +215,12 @@ export const StudentDashboard = () => {
     navigate(`/${view}`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    }
     dispatch(logout());
     navigate('/');
   };

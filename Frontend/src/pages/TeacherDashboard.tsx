@@ -12,7 +12,7 @@ import {
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { logout } from '../store/authSlice';
 import { useEffect, useState } from 'react';
-import { getTeacherDashboardData } from '../api';
+import { apiLogout, getTeacherDashboardData } from '../api';
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -39,7 +39,12 @@ export const TeacherDashboard = () => {
     navigate(`/${view}`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    }
     dispatch(logout());
     navigate('/');
   };

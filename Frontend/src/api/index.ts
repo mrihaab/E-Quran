@@ -29,10 +29,16 @@ function authHeaders(): Record<string, string> {
 
 // Queue for handling multiple requests during a token refresh
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{ resolve: (token: string) => void; reject: (error: Error) => void }> = [];
 
-function processQueue(token: string | null) {
-  refreshQueue.forEach(callback => callback(token || ''));
+function processQueue(token: string | null, error?: Error) {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (!token || error) {
+      reject(error || new Error('Session expired. Please login again.'));
+      return;
+    }
+    resolve(token);
+  });
   refreshQueue = [];
 }
 
@@ -62,14 +68,9 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
 
       // If already refreshing, wait for it to finish
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          refreshQueue.push((newToken) => {
-            resolve(apiFetch(url, {
-              ...options,
-              headers: { ...options.headers, Authorization: `Bearer ${newToken}` }
-            }));
-          });
-        });
+        return new Promise<string>((resolve, reject) => {
+          refreshQueue.push({ resolve, reject });
+        }).then(() => apiFetch(url, options));
       }
 
       isRefreshing = true;
@@ -81,8 +82,8 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
         });
         const refreshData = await refreshRes.json();
 
-        if (refreshData.success && refreshData.data?.accessToken) {
-          localStorage.setItem('equran_token', refreshData.data.accessToken);
+        if (refreshData.success && refreshData.data?.accessToken && refreshData.data?.refreshToken) {
+          setTokens(refreshData.data.accessToken, refreshData.data.refreshToken);
           isRefreshing = false;
           processQueue(refreshData.data.accessToken);
 
@@ -93,7 +94,7 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
         }
       } catch (err) {
         isRefreshing = false;
-        processQueue(null);
+        processQueue(null, new Error('Session expired. Please login again.'));
         removeTokens();
         window.location.href = '/role-selection?intent=login';
         throw new Error('Session expired. Please login again.');
@@ -133,7 +134,11 @@ export async function apiRegister(payload: any) {
   return data.data || data;
 }
 
-export async function apiLogin(email: string, password: string) {
+export async function apiLogin(
+  email: string,
+  password: string,
+  expectedRole?: 'student' | 'teacher' | 'parent' | 'admin'
+) {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -141,7 +146,16 @@ export async function apiLogin(email: string, password: string) {
   });
   const data = await response.json();
 
-  if (data.success && data.data?.accessToken) {
+  if (data.success && data.data?.accessToken && data.data?.refreshToken) {
+    const authenticatedRole = data.data?.user?.role;
+    if (expectedRole && authenticatedRole && authenticatedRole !== expectedRole) {
+      const error: any = new Error(`This account is registered as a ${authenticatedRole}. Please use the correct portal.`);
+      error.code = 'WRONG_PORTAL';
+      error.actualRole = authenticatedRole;
+      error.expectedRole = expectedRole;
+      throw error;
+    }
+
     setTokens(data.data.accessToken, data.data.refreshToken);
     return data.data; // { user, accessToken, refreshToken }
   } else {
@@ -160,6 +174,11 @@ export async function apiLogin(email: string, password: string) {
 
 export async function apiLogout() {
   const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    removeTokens();
+    return;
+  }
+
   try {
     await fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',

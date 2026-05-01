@@ -1,7 +1,8 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const { generateToken, generateRefreshToken } = require('../middleware/auth');
+const { generateToken, generateRefreshToken, JWT_REFRESH_SECRET } = require('../middleware/auth');
 const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailService');
 const { createOTP, verifyOTP: verifyOTPService } = require('../services/otpService');
 const { sendResponse } = require('../utils/responseHandler');
@@ -22,6 +23,34 @@ const PREDEFINED_ADMIN_EMAILS = [
  */
 const isPredefinedAdmin = (email) => {
   return PREDEFINED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+};
+
+const REFRESH_TOKEN_TTL_DAYS = 7;
+
+const buildRefreshTokenExpiry = () => {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS);
+  return expiresAt;
+};
+
+const persistRefreshToken = async (userId, refreshToken, userAgent = 'unknown') => {
+  await db.query(
+    'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
+    [userId, refreshToken, buildRefreshTokenExpiry(), userAgent]
+  );
+};
+
+const issueSessionTokens = async ({ user, userAgent, rotateFromToken = null }) => {
+  const accessToken = generateToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  await persistRefreshToken(user.id, refreshToken, userAgent);
+
+  if (rotateFromToken) {
+    await db.query('DELETE FROM refresh_tokens WHERE token = ?', [rotateFromToken]);
+  }
+
+  return { accessToken, refreshToken };
 };
 
 /**
@@ -223,9 +252,6 @@ exports.login = async (req, res, next) => {
     }
 
     const user = users[0];
-    
-    // DEBUG: Log user role
-    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}`);
 
     // Check if account is active
     if (user.status !== 'active') {
@@ -275,17 +301,10 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate tokens
-    const accessToken = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    const { accessToken, refreshToken } = await issueSessionTokens({
+      user,
+      userAgent: req.headers['user-agent'] || 'unknown'
+    });
 
     logger.info(`User logged in: ${email}`);
     sendResponse(res, 200, {
@@ -334,16 +353,10 @@ exports.googleCallback = async (req, res) => {
         return sendHtmlRedirect(`${FRONTEND_URL}/login?error=admin_pending_approval`);
       }
 
-      const accessToken = generateToken(dbUser);
-      const refreshToken = generateRefreshToken(dbUser);
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-      
-      await db.query(
-        'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-        [dbUser.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-      );
+      const { accessToken, refreshToken } = await issueSessionTokens({
+        user: dbUser,
+        userAgent: req.headers['user-agent'] || 'unknown'
+      });
 
       logger.info(`Google login successful: ${dbUser.email}`);
       return sendHtmlRedirect(`${FRONTEND_URL}/auth/google/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`);
@@ -676,17 +689,10 @@ exports.completeGoogleRegistration = async (req, res, next) => {
       }, 'Registration successful! Your admin account is pending approval from an existing admin.');
     }
 
-    // Generate tokens
-    const accessToken = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [userId, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    const { accessToken, refreshToken } = await issueSessionTokens({
+      user,
+      userAgent: req.headers['user-agent'] || 'unknown'
+    });
 
     logger.info(`Google registration completed: ${email}, role: ${role}`);
     sendResponse(res, 201, {
@@ -708,20 +714,50 @@ exports.refreshToken = async (req, res, next) => {
     const { refreshToken } = req.body;
     if (!refreshToken) throw new ApiError(400, 'Refresh token required.', 'MISSING_TOKEN');
 
-    const [storedToken] = await db.query(
-      'SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > NOW()',
-      [refreshToken]
-    );
-
-    if (storedToken.length === 0) {
+    let decodedRefreshToken;
+    try {
+      decodedRefreshToken = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      }
       throw new ApiError(401, 'Invalid or expired refresh token.', 'INVALID_REFRESH_TOKEN');
     }
 
-    const [users] = await db.query('SELECT * FROM users WHERE id = ?', [storedToken[0].user_id]);
+    const [storedToken] = await db.query(
+      'SELECT user_id FROM refresh_tokens WHERE token = ? AND expires_at > NOW()',
+      [refreshToken]
+    );
+
+    if (storedToken.length === 0 || storedToken[0].user_id !== decodedRefreshToken.id) {
+      await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      throw new ApiError(401, 'Invalid or expired refresh token.', 'INVALID_REFRESH_TOKEN');
+    }
+
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE id = ? AND is_deleted = 0',
+      [decodedRefreshToken.id]
+    );
     if (users.length === 0) throw new ApiError(401, 'User no longer exists.', 'USER_NOT_FOUND');
 
-    const newAccessToken = generateToken(users[0]);
-    sendResponse(res, 200, { accessToken: newAccessToken });
+    const user = users[0];
+    if (user.status !== 'active') {
+      throw new ApiError(403, 'Your account is deactivated or suspended.', 'ACCOUNT_DEACTIVATED');
+    }
+    if (!user.is_verified) {
+      throw new ApiError(403, 'Please verify your email before continuing.', 'EMAIL_UNVERIFIED');
+    }
+    if (user.role === 'admin' && user.is_approved === 0) {
+      throw new ApiError(403, 'Your admin account is pending approval.', 'ADMIN_PENDING_APPROVAL');
+    }
+
+    const rotatedTokens = await issueSessionTokens({
+      user,
+      userAgent: req.headers['user-agent'] || 'unknown',
+      rotateFromToken: refreshToken
+    });
+
+    sendResponse(res, 200, rotatedTokens, 'Session refreshed successfully.');
   } catch (error) {
     next(error);
   }
@@ -730,9 +766,12 @@ exports.refreshToken = async (req, res, next) => {
 exports.logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
-    if (refreshToken) {
-      await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+    if (!refreshToken) {
+      throw new ApiError(400, 'Refresh token required for logout.', 'MISSING_TOKEN');
     }
+
+    await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+
     sendResponse(res, 200, {}, 'Logged out successfully.');
   } catch (error) {
     next(error);
@@ -804,16 +843,10 @@ exports.verifyOTP = async (req, res, next) => {
       }, 'Email verified! Your admin account is pending approval.');
     }
 
-    const accessToken = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    
-    await db.query(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
-    );
+    const { accessToken, refreshToken } = await issueSessionTokens({
+      user,
+      userAgent: req.headers['user-agent'] || 'unknown'
+    });
 
     logger.info(`Email verified with OTP: ${email}`);
     sendResponse(res, 200, {

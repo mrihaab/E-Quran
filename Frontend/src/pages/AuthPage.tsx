@@ -43,14 +43,7 @@ export const AuthPage = () => {
   const handleLogin = async (values: { email: string; password: string }, setSubmitting: (b: boolean) => void) => {
     try {
       // apiLogin returns { user, accessToken, refreshToken } and stores tokens automatically
-      const data = await apiLogin(values.email, values.password);
-
-      // Verify that the logged-in user's role matches the portal they used
-      if (data.user && data.user.role !== role) {
-        addToast('error', 'Access Denied', `You are registered as a ${data.user.role}, but tried to login as a ${role}. Please go to the correct portal.`);
-        setSubmitting(false);
-        return;
-      }
+      const data = await apiLogin(values.email, values.password, role as UserRole);
 
       // Dispatch to Redux — tokens are already stored in localStorage by apiLogin
       dispatch(loginAction({
