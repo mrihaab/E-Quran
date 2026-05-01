@@ -120,14 +120,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           const stateData = JSON.parse(decodeURIComponent(req.query.state));
           role = stateData.role || null;
         } catch (e) {
-          console.log('Failed to parse state:', req.query.state);
+          // Malformed state parameter — ignore
         }
       }
       // Generate a state token and store role
       const stateToken = require('crypto').randomBytes(16).toString('hex');
       if (role) {
         oauthRoleStore.set(stateToken, { role, timestamp: Date.now() });
-        console.log('Stored role for OAuth:', role, 'state:', stateToken);
         // Clean old entries (older than 10 minutes)
         for (const [key, value] of oauthRoleStore) {
           if (Date.now() - value.timestamp > 10 * 60 * 1000) {
@@ -156,12 +155,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     (req, res, next) => {
       // Restore role from store using state returned by Google
       const state = req.query.state;
-      console.log('Callback received state:', state);
       if (state && oauthRoleStore.has(state)) {
         const data = oauthRoleStore.get(state);
         req.oauthRole = data.role;
         oauthRoleStore.delete(state);
-        console.log('Restored role from OAuth store:', data.role);
       }
       next();
     },

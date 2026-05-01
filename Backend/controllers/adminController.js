@@ -186,12 +186,12 @@ exports.getStats = async (req, res, next) => {
 
     // Monthly revenue (last 6 months)
     const [monthlyRevenue] = await db.query(
-      `SELECT DATE_FORMAT(payment_date, '%b %Y') as month,
+      `SELECT DATE_FORMAT(created_at, '%b %Y') as month,
               IFNULL(SUM(amount), 0) as revenue
        FROM payments
-       WHERE status = 'completed' AND payment_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-       GROUP BY DATE_FORMAT(payment_date, '%Y-%m'), DATE_FORMAT(payment_date, '%b %Y')
-       ORDER BY DATE_FORMAT(payment_date, '%Y-%m') ASC`
+       WHERE status = 'completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+       GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b %Y')
+       ORDER BY DATE_FORMAT(created_at, '%Y-%m') ASC`
     );
 
     // User role distribution

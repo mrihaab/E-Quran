@@ -188,6 +188,20 @@ router.get('/teacher', verifyToken, async (req, res, next) => {
       [teacherId]
     );
 
+    // Weekly student enrollment trend (last 6 weeks)
+    const [teacherPerfData] = await db.query(
+      `SELECT
+         CONCAT('Week ', WEEK(e.created_at, 1) - WEEK(DATE_SUB(NOW(), INTERVAL 6 WEEK), 1) + 1) as name,
+         COUNT(DISTINCT e.student_id) as value
+       FROM enrollments e
+       JOIN classes c ON e.class_id = c.id
+       WHERE c.teacher_id = ? AND e.is_deleted = 0
+         AND e.created_at >= DATE_SUB(NOW(), INTERVAL 6 WEEK)
+       GROUP BY WEEK(e.created_at, 1)
+       ORDER BY WEEK(e.created_at, 1)`,
+      [teacherId]
+    );
+
     sendResponse(res, 200, {
       activeStudents: students.count,
       classesThisWeek: classes.count,
@@ -198,17 +212,10 @@ router.get('/teacher', verifyToken, async (req, res, next) => {
       subject: teacherInfo.subject,
       qualification: teacherInfo.qualification,
       yearsExperience: teacherInfo.years_experience || 0,
-      distribution: distribution.length > 0 ? distribution : [{ name: 'N/A', value: 1 }],
+      distribution: distribution.length > 0 ? distribution : [{ name: 'No Classes', value: 1 }],
       upcomingClasses: upcoming,
       recentStudents,
-      performanceData: [
-        { name: 'Week 1', value: Math.max(0, students.count - 5) },
-        { name: 'Week 2', value: Math.max(0, students.count - 3) },
-        { name: 'Week 3', value: Math.max(0, students.count - 2) },
-        { name: 'Week 4', value: Math.max(0, students.count - 1) },
-        { name: 'Week 5', value: students.count },
-        { name: 'Week 6', value: students.count }
-      ]
+      performanceData: teacherPerfData.length >= 2 ? teacherPerfData : []
     });
   } catch (error) {
     next(error);

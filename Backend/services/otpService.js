@@ -52,7 +52,7 @@ const createOTP = async (email) => {
       [email, otp, expiresAt]
     );
 
-    logger.info(`OTP created for ${email}: ${otp}`);
+    logger.info(`OTP created for ${email}`);
     return otp; // Return plain OTP for sending via email
   } catch (error) {
     logger.error('Error creating OTP:', error);
@@ -65,7 +65,7 @@ const createOTP = async (email) => {
  */
 const verifyOTP = async (email, otp) => {
   try {
-    logger.info(`Verifying OTP for ${email}, entered OTP: ${otp}`);
+    logger.info(`Verifying OTP for ${email}`);
     
     // Get latest unused OTP for this email
     const [records] = await db.query(
@@ -81,7 +81,6 @@ const verifyOTP = async (email, otp) => {
     }
 
     const record = records[0];
-    logger.info(`Found OTP record for ${email}, attempts: ${record.attempts}`);
 
     // Check max attempts
     if (record.attempts >= MAX_ATTEMPTS) {
@@ -90,9 +89,7 @@ const verifyOTP = async (email, otp) => {
       return { valid: false, message: 'Too many failed attempts. Please request a new OTP.' };
     }
 
-    // Verify OTP (plain text comparison for now)
     const isValid = otp === record.otp;
-    logger.info(`OTP comparison: entered=${otp}, stored=${record.otp}, result=${isValid}`);
 
     // Increment attempts
     await db.query(

@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const logger = require('../utils/logger');
 require('dotenv').config();
 
 const pool = mysql.createPool({
@@ -24,12 +25,11 @@ const pool = mysql.createPool({
 async function testConnection() {
   try {
     const connection = await pool.getConnection();
-    console.log('✓ MySQL connected successfully to', process.env.DB_NAME || 'equran_academy');
+    logger.info(`MySQL connected to database: ${process.env.DB_NAME || 'equran_academy'}`);
     connection.release();
   } catch (error) {
-    console.error('✕ MySQL connection failed:', error.message);
-    console.error('  Make sure XAMPP MySQL is running and the database exists.');
-    console.error('  Run db_setup.sql in phpMyAdmin first.');
+    logger.error(`MySQL connection failed: ${error.message}`);
+    logger.error('Ensure MySQL is running and the database/credentials are correct.');
   }
 }
 

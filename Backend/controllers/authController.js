@@ -223,9 +223,6 @@ exports.login = async (req, res, next) => {
     }
 
     const user = users[0];
-    
-    // DEBUG: Log user role
-    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}`);
 
     // Check if account is active
     if (user.status !== 'active') {

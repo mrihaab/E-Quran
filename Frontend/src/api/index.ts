@@ -242,7 +242,7 @@ export async function apiResetPassword(resetToken: string, newPassword: string) 
 // ==================== GOOGLE OAUTH ====================
 // Must point directly to the backend — do NOT use /api proxy path.
 // Google OAuth uses server-side redirects that break through Vite proxy.
-const BACKEND_DIRECT_URL = 'http://localhost:5000';
+const BACKEND_DIRECT_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export function getGoogleAuthUrl(role?: string) {
   let url = `${BACKEND_DIRECT_URL}/api/auth/google`;

@@ -146,9 +146,25 @@ io.on('connection', (socket) => {
   });
 });
 
+// ==================== SCHEDULED CLEANUP ====================
+const { cleanupExpiredOTPs } = require('./services/otpService');
+const db = require('./config/db');
+
+// Run cleanup every hour
+setInterval(async () => {
+  try {
+    await cleanupExpiredOTPs();
+    // Also clean up expired refresh tokens
+    await db.query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
+    // Clean up expired password reset tokens
+    await db.query('DELETE FROM password_reset_tokens WHERE expires_at < NOW() - INTERVAL 1 DAY');
+  } catch (err) {
+    logger.error('Scheduled cleanup error:', err.message);
+  }
+}, 60 * 60 * 1000);
+
 // ==================== START SERVER ====================
 server.listen(PORT, () => {
-  logger.info(`🚀 E-Quran Academy Backend running at http://localhost:${PORT}`);
-  logger.info(`📖 API Docs: http://localhost:${PORT}/api-docs`);
-  logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
+  logger.info(`E-Quran Academy backend running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  logger.info(`API docs: http://localhost:${PORT}/api-docs`);
 });
