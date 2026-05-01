@@ -12,7 +12,7 @@ exports.getAllMessages = async (req, res, next) => {
     const { page, limit, status } = req.query;
 
     let query = `
-      SELECT id, name, email, subject, message, status, email_sent, created_at, updated_at
+      SELECT id, name, email, subject, message, status, email_sent, admin_notes, created_at
       FROM contact_messages
       WHERE 1=1
     `;
@@ -160,23 +160,30 @@ exports.replyToMessage = async (req, res, next) => {
 
     const { email, name, subject } = messages[0];
 
-    // Import email service
-    const { sendEmail } = require('../services/emailService');
-    
-    await sendEmail({
-      to: email,
-      subject: `Re: ${subject}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #11d473;">Hello ${name},</h2>
-          <p>Thank you for contacting E-Quran Academy. Here is our response:</p>
-          <div style="background-color: #f0f0f0; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            <p>${replyMessage.replace(/\n/g, '<br>')}</p>
-          </div>
-          <p>Best regards,<br><strong>E-Quran Academy Team</strong></p>
-        </div>
-      `
-    });
+    try {
+      const sgMail = require('@sendgrid/mail');
+      if (process.env.SENDGRID_API_KEY) {
+        await sgMail.send({
+          to: email,
+          from: process.env.FROM_EMAIL || 'noreply@equran.com',
+          subject: `Re: ${subject}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #2e7d32;">Hello ${name},</h2>
+              <p>Thank you for contacting E-Quran Academy. Here is our response:</p>
+              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p>${replyMessage.replace(/\n/g, '<br>')}</p>
+              </div>
+              <p>Best regards,<br><strong>E-Quran Academy Team</strong></p>
+            </div>
+          `,
+        });
+      } else {
+        logger.debug(`[MOCK REPLY] To: ${email} | Subject: Re: ${subject} | Message: ${replyMessage}`);
+      }
+    } catch (emailErr) {
+      logger.error('Failed to send reply email:', emailErr.message);
+    }
 
     // Update status to resolved
     await db.query(
