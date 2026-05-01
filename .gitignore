@@ -1,6 +1,36 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build output
 dist/
+build/
+
+# Environment files (NEVER commit secrets)
 .env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Logs
 *.log
+logs/
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vite cache
+.vite/
+
+# Uploads (user-generated)
+Backend/uploads/*
+!Backend/uploads/.gitkeep

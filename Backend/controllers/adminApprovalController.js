@@ -306,9 +306,8 @@ exports.suspendTeacher = async (req, res, next) => {
       [teacherId, adminId, 'suspended', reason, adminNotes || null]
     );
 
-    // Also mark as suspended in users table
     await db.query(
-      'UPDATE users SET is_suspended = 1 WHERE id = ?',
+      "UPDATE users SET status = 'suspended' WHERE id = ?",
       [teacherId]
     );
 
@@ -336,7 +335,7 @@ exports.reactivateTeacher = async (req, res, next) => {
 
     // Check if teacher exists and is suspended
     const [teachers] = await db.query(
-      'SELECT id, full_name, email, approval_status, is_suspended FROM users WHERE id = ? AND role = "teacher" AND is_deleted = 0',
+      'SELECT id, full_name, email, approval_status, status FROM users WHERE id = ? AND role = "teacher" AND is_deleted = 0',
       [teacherId]
     );
 
@@ -346,19 +345,17 @@ exports.reactivateTeacher = async (req, res, next) => {
 
     const teacher = teachers[0];
 
-    if (teacher.approval_status !== 'suspended' && !teacher.is_suspended) {
+    if (teacher.approval_status !== 'suspended' && teacher.status !== 'suspended') {
       throw new ApiError(400, 'Teacher is not suspended');
     }
 
-    // Execute reactivation using stored procedure
     await db.query(
       'CALL ProcessTeacherApproval(?, ?, ?, ?, ?)',
       [teacherId, adminId, 'reactivated', null, adminNotes || null]
     );
 
-    // Remove suspension flag
     await db.query(
-      "UPDATE users SET is_suspended = 0, approval_status = 'approved' WHERE id = ?",
+      "UPDATE users SET status = 'active', approval_status = 'approved' WHERE id = ?",
       [teacherId]
     );
 

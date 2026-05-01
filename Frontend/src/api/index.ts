@@ -27,13 +27,19 @@ function authHeaders(): Record<string, string> {
     : { 'Content-Type': 'application/json' };
 }
 
-// Queue for handling multiple requests during a token refresh
 let isRefreshing = false;
 let refreshQueue: Array<(token: string) => void> = [];
 
 function processQueue(token: string | null) {
   refreshQueue.forEach(callback => callback(token || ''));
   refreshQueue = [];
+}
+
+function handleSessionExpired() {
+  removeTokens();
+  if (window.location.pathname !== '/role-selection') {
+    window.location.href = '/role-selection?intent=login&expired=true';
+  }
 }
 
 // ==================== GENERIC FETCH WRAPPER ====================
@@ -44,23 +50,29 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
       headers: { ...authHeaders(), ...(options.headers || {}) },
     });
 
-    // Handle Network/Proxy Errors
     if (res.status === 502 || res.status === 504) {
       throw new Error('Connection refused. Please ensure your backend server is running.');
     }
 
     const data = await res.json();
 
-    // HANDLE TOKEN EXPIRATION (Silent Refresh)
+    // Handle approval/suspension status from backend
+    if (res.status === 403 && (data.code === 'NOT_APPROVED' || data.code === 'ACCOUNT_SUSPENDED' || data.code === 'ACCOUNT_INACTIVE')) {
+      const error: any = new Error(data.message || 'Account access denied');
+      error.code = data.code;
+      error.status = res.status;
+      error.approvalStatus = data.approvalStatus;
+      throw error;
+    }
+
+    // Handle token expiration with silent refresh
     if (res.status === 401 && data.code === 'TOKEN_EXPIRED') {
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
-        removeTokens();
-        window.location.href = '/role-selection?intent=login';
+        handleSessionExpired();
         throw new Error('Session expired. Please login again.');
       }
 
-      // If already refreshing, wait for it to finish
       if (isRefreshing) {
         return new Promise((resolve) => {
           refreshQueue.push((newToken) => {
@@ -85,19 +97,21 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
           localStorage.setItem('equran_token', refreshData.data.accessToken);
           isRefreshing = false;
           processQueue(refreshData.data.accessToken);
-
-          // Retry original request
           return apiFetch(url, options);
         } else {
           throw new Error('Refresh failed');
         }
-      } catch (err) {
+      } catch {
         isRefreshing = false;
         processQueue(null);
-        removeTokens();
-        window.location.href = '/role-selection?intent=login';
+        handleSessionExpired();
         throw new Error('Session expired. Please login again.');
       }
+    }
+
+    if (res.status === 401 && data.code === 'USER_NOT_FOUND') {
+      handleSessionExpired();
+      throw new Error('Account not found. Please login again.');
     }
 
     if (!res.ok || data.success === false) {
@@ -107,7 +121,6 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
       throw error;
     }
 
-    // Return the 'data' part of the standardized backend response
     return data.data !== undefined ? data.data : data;
   } catch (error: any) {
     if (error.name === 'SyntaxError') {
@@ -143,9 +156,8 @@ export async function apiLogin(email: string, password: string) {
 
   if (data.success && data.data?.accessToken) {
     setTokens(data.data.accessToken, data.data.refreshToken);
-    return data.data; // { user, accessToken, refreshToken }
+    return data.data;
   } else {
-    // Pass through all error details for specific error handling
     const error: any = new Error(data.message || 'Login failed');
     error.code = data.code;
     error.showForgotPassword = data.showForgotPassword;
@@ -153,6 +165,7 @@ export async function apiLogin(email: string, password: string) {
     error.requiresRegistration = data.requiresRegistration;
     error.requiresApproval = data.requiresApproval;
     error.verificationRequired = data.verificationRequired;
+    error.approvalStatus = data.approvalStatus;
     error.email = data.email;
     throw error;
   }
@@ -240,12 +253,12 @@ export async function apiResetPassword(resetToken: string, newPassword: string) 
 }
 
 // ==================== GOOGLE OAUTH ====================
-// Must point directly to the backend — do NOT use /api proxy path.
-// Google OAuth uses server-side redirects that break through Vite proxy.
-const BACKEND_DIRECT_URL = 'http://localhost:5000';
+const BACKEND_URL = typeof window !== 'undefined'
+  ? `${window.location.protocol}//${window.location.hostname}:5000`
+  : 'http://localhost:5000';
 
 export function getGoogleAuthUrl(role?: string) {
-  let url = `${BACKEND_DIRECT_URL}/api/auth/google`;
+  let url = `${BACKEND_URL}/api/auth/google`;
   if (role) {
     const state = encodeURIComponent(JSON.stringify({ role }));
     url += `?state=${state}`;
@@ -342,39 +355,22 @@ export async function unenroll(enrollmentId: number) {
 }
 
 // ==================== MESSAGES ====================
-/**
- * Send a message to a receiver
- */
 export async function sendMessage(receiverId: number, content: string) {
   return apiFetch('/messages', { method: 'POST', body: JSON.stringify({ receiverId, content }) });
 }
 
-/**
- * Get messages between logged-in user and a partner
- * @param partnerId - The ID of the conversation partner
- */
 export async function getMessages(partnerId: number) {
   return apiFetch(`/messages/${partnerId}`);
 }
 
-/**
- * Get all conversations for the logged-in user
- */
 export async function getConversations() {
   return apiFetch('/messages/conversations');
 }
 
-/**
- * Mark all messages from a partner as read
- * @param partnerId - The ID of the message sender (conversation partner)
- */
 export async function markMessageRead(partnerId: number) {
   return apiFetch(`/messages/${partnerId}/read`, { method: 'PUT' });
 }
 
-/**
- * Delete a message
- */
 export async function deleteMessage(messageId: number) {
   return apiFetch(`/messages/${messageId}`, { method: 'DELETE' });
 }
@@ -504,7 +500,7 @@ export async function getHealth() {
   return apiFetch('/health');
 }
 
-// ==================== USER DIRECTORY / SEARCH ====================
+// ==================== USER DIRECTORY ====================
 export async function searchUsers(query?: string, role?: string) {
   const params = new URLSearchParams();
   if (query) params.append('q', query);

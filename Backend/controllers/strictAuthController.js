@@ -203,7 +203,7 @@ exports.googleCallbackStrict = async (req, res) => {
     const dbUser = users[0];
 
     // Check if account is active/suspended
-    if (dbUser.is_suspended) {
+    if (dbUser.status === 'suspended') {
       return sendHtmlRedirect(`${FRONTEND_URL}/login?error=account_suspended`);
     }
 
@@ -262,16 +262,20 @@ exports.registerWithApproval = async (req, res, next) => {
       throw new ApiError(400, 'Email is already registered.', 'EMAIL_EXISTS');
     }
 
-    // Determine approval status based on role
+    const PREDEFINED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean);
+
     let approvalStatus = 'pending';
-    
+
     if (role === 'admin') {
-      // Predefined admins are auto-approved
-      const PREDEFINED_ADMIN_EMAILS = ['orhanuppal@gmail.com', 'mrihaab6@gmail.com', 'm.bilalirshad469@gmail.com'];
       if (PREDEFINED_ADMIN_EMAILS.includes(email.toLowerCase().trim())) {
         approvalStatus = 'approved';
         logger.info(`Auto-approved predefined admin: ${email}`);
       }
+    } else if (role === 'student') {
+      approvalStatus = 'approved';
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -379,7 +383,7 @@ exports.checkStatus = async (req, res, next) => {
     const userId = req.user.id;
     
     const [users] = await db.query(
-      'SELECT approval_status, role, is_suspended, rejection_reason FROM users WHERE id = ?',
+      'SELECT approval_status, role, status, rejection_reason FROM users WHERE id = ?',
       [userId]
     );
 
@@ -389,11 +393,10 @@ exports.checkStatus = async (req, res, next) => {
 
     const user = users[0];
 
-    // If rejected, include reason
     const response = {
       approvalStatus: user.approval_status,
       role: user.role,
-      isSuspended: !!user.is_suspended
+      isSuspended: user.status === 'suspended'
     };
 
     if (user.approval_status === 'rejected') {

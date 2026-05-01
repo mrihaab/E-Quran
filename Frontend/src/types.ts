@@ -2,6 +2,8 @@ export type View = 'landing' | 'role-selection' | 'login' | 'sign-up' | 'registe
 
 export type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 export interface Toast {
@@ -12,7 +14,6 @@ export interface Toast {
   duration?: number;
 }
 
-// Auth types
 export interface User {
   id: number;
   name: string;
@@ -23,6 +24,7 @@ export interface User {
   gender?: string;
   address?: string;
   isVerified?: boolean;
+  approvalStatus?: ApprovalStatus;
 }
 
 export interface AuthState {

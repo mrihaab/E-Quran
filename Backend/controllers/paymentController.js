@@ -3,25 +3,31 @@ const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
 const logger = require('../utils/logger');
 
-// Initialize Stripe only if API key is available
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
   stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  logger.info('Stripe payment gateway initialized');
 }
 
-/**
- * STRIPE: CREATE CHECKOUT SESSION
- */
 exports.createStripeSession = async (req, res, next) => {
   try {
     const { amount, classId } = req.body;
     const userId = req.user.id;
 
-    if (!amount || !classId) throw new ApiError(400, 'Amount and classId are required.');
+    if (!amount || amount <= 0) throw new ApiError(400, 'A valid amount is required.', 'INVALID_AMOUNT');
+    if (!classId) throw new ApiError(400, 'Class ID is required.', 'MISSING_CLASS_ID');
 
-    if (!stripe || !process.env.STRIPE_SECRET_KEY) {
-      logger.warn('STRIPE_SECRET_KEY missing. Simulating payment.');
-      return sendResponse(res, 200, { sessionId: 'mock_session_id', url: `${process.env.FRONTEND_URL}/payment-success?mock=true` });
+    const [classes] = await db.query(
+      'SELECT id, name FROM classes WHERE id = ? AND is_deleted = 0',
+      [classId]
+    );
+    if (classes.length === 0) {
+      throw new ApiError(404, 'Class not found.', 'CLASS_NOT_FOUND');
+    }
+
+    if (!stripe) {
+      logger.warn('Stripe not configured. Payment gateway unavailable.');
+      throw new ApiError(503, 'Payment gateway is not configured. Please contact administration.', 'PAYMENT_NOT_CONFIGURED');
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -29,15 +35,15 @@ exports.createStripeSession = async (req, res, next) => {
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { name: `Course Enrollment: ${classId}` },
+          product_data: { name: `Course Enrollment: ${classes[0].name}` },
           unit_amount: Math.round(amount * 100),
         },
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/payment-failed`,
-      metadata: { userId, classId }
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment-failed`,
+      metadata: { userId: String(userId), classId: String(classId) }
     });
 
     sendResponse(res, 200, { sessionId: session.id, url: session.url });
@@ -46,70 +52,69 @@ exports.createStripeSession = async (req, res, next) => {
   }
 };
 
-/**
- * STRIPE: WEBHOOK / VERIFY PAYMENT
- */
 exports.verifyStripePayment = async (req, res, next) => {
   try {
     const { sessionId } = req.body;
-    
-    // In production, we'd use Stripe Webhooks. 
-    // Here we'll do a manual verification pull for simplicity/portability
-    if (!stripe || !process.env.STRIPE_SECRET_KEY) {
-       // Mock success
-       return sendResponse(res, 200, { status: 'completed' });
+
+    if (!sessionId) throw new ApiError(400, 'Session ID is required.', 'MISSING_SESSION_ID');
+
+    if (!stripe) {
+      throw new ApiError(503, 'Payment gateway is not configured.', 'PAYMENT_NOT_CONFIGURED');
     }
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (session.payment_status === 'paid') {
-      // Record in DB
       const { userId, classId } = session.metadata;
-      await db.query(
-        'INSERT INTO payments (payer_id, payee_id, amount, payment_method, status, notes) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, 0, session.amount_total / 100, 'Credit Card', 'completed', `Stripe Session: ${sessionId}`]
+
+      const [existing] = await db.query(
+        'SELECT id FROM payments WHERE transaction_id = ?',
+        [sessionId]
       );
-      
+
+      if (existing.length === 0) {
+        await db.query(
+          'INSERT INTO payments (payer_id, payee_id, amount, payment_method, status, transaction_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [userId, 0, session.amount_total / 100, 'Stripe', 'completed', sessionId, `Stripe Checkout Session`]
+        );
+      }
+
       sendResponse(res, 200, { status: 'completed' });
     } else {
-      sendResponse(res, 400, { status: 'failed' });
+      sendResponse(res, 200, { status: session.payment_status });
     }
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * PLACEHOLDER: JAZZCASH HANDLER
- */
 exports.initiateJazzCash = async (req, res, next) => {
   try {
-    // This is a placeholder for future integration
-    sendResponse(res, 200, { message: 'JazzCash integration coming soon.' }, 'FEATURE_LOCKED');
+    throw new ApiError(503, 'JazzCash payment integration is not yet available.', 'FEATURE_UNAVAILABLE');
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * PLACEHOLDER: EASYPAISA HANDLER
- */
 exports.initiateEasyPaisa = async (req, res, next) => {
   try {
-    // This is a placeholder for future integration
-    sendResponse(res, 200, { message: 'EasyPaisa integration coming soon.' }, 'FEATURE_LOCKED');
+    throw new ApiError(503, 'EasyPaisa payment integration is not yet available.', 'FEATURE_UNAVAILABLE');
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * GET PAYMENT HISTORY
- */
 exports.getPaymentHistory = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const [payments] = await db.query(
-      'SELECT * FROM payments WHERE payer_id = ? OR payee_id = ? ORDER BY created_at DESC',
+      `SELECT p.*, 
+              payer.full_name AS payer_name,
+              payee.full_name AS payee_name
+       FROM payments p
+       LEFT JOIN users payer ON p.payer_id = payer.id
+       LEFT JOIN users payee ON p.payee_id = payee.id
+       WHERE (p.payer_id = ? OR p.payee_id = ?) AND p.is_deleted = 0
+       ORDER BY p.created_at DESC`,
       [userId, userId]
     );
     sendResponse(res, 200, payments);

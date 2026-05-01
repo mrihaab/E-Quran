@@ -14,7 +14,7 @@ exports.getAllUsers = async (req, res, next) => {
     let query = `
       SELECT 
         u.id, u.full_name, u.email, u.phone, u.role, u.status,
-        u.profile_image, u.is_verified, u.is_approved, u.created_at,
+        u.profile_image, u.is_verified, u.approval_status, u.created_at,
         CASE
           WHEN u.role = 'student' THEN s.student_id
           WHEN u.role = 'teacher' THEN t.teacher_id
@@ -60,7 +60,7 @@ exports.getUser = async (req, res, next) => {
 
     const [users] = await db.query(
       `SELECT id, full_name, email, phone, role, status, profile_image,
-              is_verified, is_approved, gender, address, created_at
+              is_verified, approval_status, gender, address, created_at
        FROM users WHERE id = ? AND is_deleted = 0`,
       [userId]
     );
@@ -78,7 +78,7 @@ exports.getUser = async (req, res, next) => {
  */
 exports.updateUser = async (req, res, next) => {
   try {
-    const { status, role, is_approved, full_name, phone } = req.body;
+    const { status, role, approval_status, full_name, phone } = req.body;
     const userId = req.params.userId;
 
     // Prevent admin from modifying themselves
@@ -91,7 +91,7 @@ exports.updateUser = async (req, res, next) => {
 
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
     if (role !== undefined) { updates.push('role = ?'); values.push(role); }
-    if (is_approved !== undefined) { updates.push('is_approved = ?'); values.push(is_approved ? 1 : 0); }
+    if (approval_status !== undefined) { updates.push('approval_status = ?'); values.push(approval_status); }
     if (full_name) { updates.push('full_name = ?'); values.push(full_name); }
     if (phone) { updates.push('phone = ?'); values.push(phone); }
 
@@ -186,12 +186,12 @@ exports.getStats = async (req, res, next) => {
 
     // Monthly revenue (last 6 months)
     const [monthlyRevenue] = await db.query(
-      `SELECT DATE_FORMAT(payment_date, '%b %Y') as month,
+      `SELECT DATE_FORMAT(created_at, '%b %Y') as month,
               IFNULL(SUM(amount), 0) as revenue
        FROM payments
-       WHERE status = 'completed' AND payment_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-       GROUP BY DATE_FORMAT(payment_date, '%Y-%m'), DATE_FORMAT(payment_date, '%b %Y')
-       ORDER BY DATE_FORMAT(payment_date, '%Y-%m') ASC`
+       WHERE status = 'completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+       GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b %Y')
+       ORDER BY DATE_FORMAT(created_at, '%Y-%m') ASC`
     );
 
     // User role distribution

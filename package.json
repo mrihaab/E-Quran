@@ -1,14 +1,16 @@
 {
-  "name": "react-example",
+  "name": "equran-academy",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
+  "description": "E-Quran Academy - Online Quran Learning Management System",
   "type": "module",
   "scripts": {
     "dev": "npm run frontend:dev",
     "frontend:dev": "npm --prefix Frontend run dev",
     "frontend:build": "npm --prefix Frontend run build",
     "backend:dev": "npm --prefix Backend run dev",
-    "backend:start": "npm --prefix Backend run start"
+    "backend:start": "npm --prefix Backend run start",
+    "install:all": "npm install && npm --prefix Frontend install && npm --prefix Backend install"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

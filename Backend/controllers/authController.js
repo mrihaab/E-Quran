@@ -8,48 +8,31 @@ const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
 const logger = require('../utils/logger');
 
-// ============================================
-// PREDEFINED ADMIN EMAILS - Direct Admin Access
-// ============================================
-const PREDEFINED_ADMIN_EMAILS = [
-  'orhanuppal@gmail.com',
-  'mrihaab6@gmail.com',
-  'm.bilalirshad469@gmail.com'
-];
+const PREDEFINED_ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);
 
-/**
- * Check if email is a predefined admin
- */
 const isPredefinedAdmin = (email) => {
   return PREDEFINED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
 };
 
-/**
- * Create password reset OTP
- */
 const createPasswordResetOTP = async (email) => {
-  // Delete any existing unused OTPs for this email
   await db.query('DELETE FROM password_reset_tokens WHERE email = ? AND is_used = 0', [email]);
-  
-  // Generate 6-digit OTP
+
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
-  // Set expiry to 15 minutes
+
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + 15);
-  
-  // Store OTP
+
   await db.query(
     'INSERT INTO password_reset_tokens (email, otp, expires_at) VALUES (?, ?, ?)',
     [email, otp, expiresAt]
   );
-  
+
   return otp;
 };
 
-/**
- * Verify password reset OTP
- */
 const verifyPasswordResetOTP = async (email, otp) => {
   const [records] = await db.query(
     `SELECT * FROM password_reset_tokens 
@@ -57,28 +40,25 @@ const verifyPasswordResetOTP = async (email, otp) => {
      ORDER BY created_at DESC LIMIT 1`,
     [email, otp]
   );
-  
+
   if (records.length === 0) {
     return { valid: false, message: 'Invalid or expired OTP.' };
   }
-  
+
   const record = records[0];
-  
-  // Check max attempts
+
   if (record.attempts >= 5) {
     await db.query('UPDATE password_reset_tokens SET is_used = 1 WHERE id = ?', [record.id]);
     return { valid: false, message: 'Too many failed attempts. Please request a new OTP.' };
   }
-  
-  // Increment attempts on wrong OTP
+
   if (record.otp !== otp) {
     await db.query('UPDATE password_reset_tokens SET attempts = attempts + 1 WHERE id = ?', [record.id]);
     return { valid: false, message: 'Invalid OTP.' };
   }
-  
-  // Mark as used
+
   await db.query('UPDATE password_reset_tokens SET is_used = 1 WHERE id = ?', [record.id]);
-  
+
   return { valid: true, message: 'OTP verified successfully.' };
 };
 
@@ -93,76 +73,75 @@ exports.register = async (req, res, next) => {
       throw new ApiError(400, 'Full name, email, password, and role are required.', 'MISSING_FIELDS');
     }
 
-    // SECURITY: Block predefined admin emails from regular registration
-    // These emails can only be used via Google OAuth or by existing system
+    const validRoles = ['student', 'teacher', 'parent', 'admin'];
+    if (!validRoles.includes(role)) {
+      throw new ApiError(400, 'Invalid role specified.', 'INVALID_ROLE');
+    }
+
+    if (password.length < 8) {
+      throw new ApiError(400, 'Password must be at least 8 characters long.', 'WEAK_PASSWORD');
+    }
+
     if (isPredefinedAdmin(email) && role !== 'admin') {
       throw new ApiError(403, 'This email is reserved. Please use a different email or contact support.', 'RESERVED_EMAIL');
     }
 
-    // Check if user already exists
     const [existing] = await db.query('SELECT id, is_verified FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
       throw new ApiError(400, 'Email is already registered. Please login instead.', 'EMAIL_EXISTS');
     }
 
-    // Check if role is admin and handle approval
-    let isApproved = 1;
-    let finalRole = role;
-    
+    let approvalStatus = 'pending';
     if (role === 'admin') {
-      if (isPredefinedAdmin(email)) {
-        // Predefined admin - auto approve
-        isApproved = 1;
-        logger.info(`Predefined admin registered: ${email}`);
-      } else {
-        // Non-predefined admin - needs approval
-        isApproved = 0;
-        logger.info(`Admin registration pending approval: ${email}`);
-      }
+      approvalStatus = isPredefinedAdmin(email) ? 'approved' : 'pending';
+    } else if (role === 'student') {
+      approvalStatus = 'approved';
     }
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const [userResult] = await db.query(
-      `INSERT INTO users (full_name, email, password_hash, phone, role, gender, address, profile_image, is_verified, is_approved)
+      `INSERT INTO users (full_name, email, password_hash, phone, role, gender, address, profile_image, is_verified, approval_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-      [fullName, email, passwordHash, phone || null, finalRole, gender || null, address || null, 
-       `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`, isApproved]
+      [fullName, email, passwordHash, phone || null, role, gender || null, address || null,
+       `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`, approvalStatus]
     );
 
     const userId = userResult.insertId;
 
-    // Role-specific data
-    if (finalRole === 'student') {
+    if (role === 'student') {
       const { studentId, dateOfBirth, course, enrollmentYear } = req.body;
       await db.query(
         `INSERT INTO students (user_id, student_id, date_of_birth, course, enrollment_year, level)
          VALUES (?, ?, ?, ?, ?, 'Beginner')`,
         [userId, studentId || `STU${userId}`, dateOfBirth || null, course || null, enrollmentYear || new Date().getFullYear()]
       );
-    } else if (finalRole === 'teacher') {
+    } else if (role === 'teacher') {
       const { teacherId, qualification, subject, yearsOfExperience, salary } = req.body;
       await db.query(
         `INSERT INTO teachers (user_id, teacher_id, qualification, subject, years_experience, salary)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [userId, teacherId || `TEA${userId}`, qualification || null, subject || null, yearsOfExperience || 0, salary || null]
       );
-    } else if (finalRole === 'parent') {
+      await db.query(
+        'INSERT INTO teacher_verification_documents (user_id) VALUES (?)',
+        [userId]
+      );
+    } else if (role === 'parent') {
       const { parentId, occupation } = req.body;
       await db.query(
         `INSERT INTO parents (user_id, parent_id, occupation)
          VALUES (?, ?, ?)`,
         [userId, parentId || `PAR${userId}`, occupation || null]
       );
-    } else if (finalRole === 'admin') {
+    } else if (role === 'admin') {
       await db.query(
         `INSERT INTO admins (user_id, admin_level, permissions)
          VALUES (?, ?, ?)`,
-        [userId, isApproved ? 'super' : 'pending', JSON.stringify({})]
+        [userId, isPredefinedAdmin(email) ? 'super' : 'regular', JSON.stringify({})]
       );
-      
-      // If not predefined admin, create approval request
+
       if (!isPredefinedAdmin(email)) {
         await db.query(
           `INSERT INTO admin_approval_requests (user_id, email, full_name, request_reason, status)
@@ -178,21 +157,20 @@ exports.register = async (req, res, next) => {
       [userId, JSON.stringify({}), JSON.stringify({})]
     );
 
-    // Generate and send OTP
     const otp = await createOTP(email);
     await sendOTPEmail(email, otp);
 
-    logger.info(`User registered: ${email}, role: ${finalRole}, approved: ${isApproved}`);
-    
-    const message = isApproved === 0 && finalRole === 'admin' 
-      ? 'Registration successful! Your admin request is pending approval. Please verify your email with the OTP sent.'
+    logger.info(`User registered: ${email}, role: ${role}, approval: ${approvalStatus}`);
+
+    const message = approvalStatus === 'pending'
+      ? 'Registration successful! Your account is pending approval. Please verify your email with the OTP sent.'
       : 'Registration successful! Please verify your email with the OTP sent.';
-    
-    sendResponse(res, 201, { 
-      verificationRequired: true, 
+
+    sendResponse(res, 201, {
+      verificationRequired: true,
       email,
-      role: finalRole,
-      isApproved: isApproved === 1
+      role,
+      approvalStatus
     }, message);
   } catch (error) {
     next(error);
@@ -200,20 +178,22 @@ exports.register = async (req, res, next) => {
 };
 
 // ============================================
-// LOGIN USER - Registration Required
+// LOGIN USER
 // ============================================
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // Check if user exists - MUST be registered first
+    if (!email || !password) {
+      throw new ApiError(400, 'Email and password are required.', 'MISSING_FIELDS');
+    }
+
     const [users] = await db.query(
-      'SELECT * FROM users WHERE email = ?',
+      'SELECT * FROM users WHERE email = ? AND is_deleted = 0',
       [email]
     );
 
     if (users.length === 0) {
-      // User not registered
       return res.status(401).json({
         success: false,
         message: 'Account not found. Please register first.',
@@ -223,27 +203,21 @@ exports.login = async (req, res, next) => {
     }
 
     const user = users[0];
-    
-    // DEBUG: Log user role
-    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}`);
 
-    // Check if account is active
     if (user.status !== 'active') {
       throw new ApiError(403, 'Your account is deactivated or suspended.', 'ACCOUNT_DEACTIVATED');
     }
 
-    // Check if admin is approved
-    if (user.role === 'admin' && user.is_approved === 0) {
+    if (user.approval_status !== 'approved') {
       return res.status(403).json({
         success: false,
-        message: 'Your admin account is pending approval. Please wait for an existing admin to approve your request.',
-        code: 'ADMIN_PENDING_APPROVAL',
-        requiresApproval: true
+        message: `Your account is ${user.approval_status}. Please wait for admin approval.`,
+        code: 'PENDING_APPROVAL',
+        approvalStatus: user.approval_status
       });
     }
 
-    // Check if user registered via Google OAuth only (no password set)
-    if (user.password_hash === 'google_oauth' || user.password_hash === 'PREDEFINED_ADMIN') {
+    if (!user.password_hash || user.password_hash === 'google_oauth') {
       return res.status(401).json({
         success: false,
         message: 'This account was created via Google. Please use "Continue with Google" to login, or use Forgot Password to set a password.',
@@ -253,7 +227,6 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({
@@ -264,32 +237,39 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Check if email is verified
     if (!user.is_verified) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
         message: 'Please verify your email address before logging in.',
         code: 'EMAIL_UNVERIFIED',
         verificationRequired: true,
-        email: user.email 
+        email: user.email
       });
     }
 
-    // Generate tokens
     const accessToken = generateToken(user);
     const refreshToken = generateRefreshToken(user);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    
+
     await db.query(
       'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
       [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
     );
 
+    await db.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
+
     logger.info(`User logged in: ${email}`);
     sendResponse(res, 200, {
-      user: { id: user.id, name: user.full_name, email: user.email, role: user.role, profileImage: user.profile_image },
+      user: {
+        id: user.id,
+        name: user.full_name,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profile_image,
+        approvalStatus: user.approval_status
+      },
       accessToken,
       refreshToken
     }, 'Login successful!');
@@ -299,10 +279,9 @@ exports.login = async (req, res, next) => {
 };
 
 // ============================================
-// GOOGLE OAUTH CALLBACK - Registered Users Only
+// GOOGLE OAUTH CALLBACK
 // ============================================
 exports.googleCallback = async (req, res) => {
-  // Helper to force a client-side redirect, bypassing Chrome 302 strictness
   const sendHtmlRedirect = (url) => {
     res.send(`
       <html>
@@ -314,24 +293,23 @@ exports.googleCallback = async (req, res) => {
 
   try {
     const user = req.user;
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-    // If user is already registered and exists in DB
     if (!user.isNewUser && user.id) {
-      const [users] = await db.query('SELECT * FROM users WHERE id = ?', [user.id]);
-      
+      const [users] = await db.query('SELECT * FROM users WHERE id = ? AND is_deleted = 0', [user.id]);
+
       if (users.length === 0) {
         return sendHtmlRedirect(`${FRONTEND_URL}/login?error=user_not_found`);
       }
-      
+
       const dbUser = users[0];
-      
+
       if (dbUser.status !== 'active') {
         return sendHtmlRedirect(`${FRONTEND_URL}/login?error=account_deactivated`);
       }
-      
-      if (dbUser.role === 'admin' && dbUser.is_approved === 0) {
-        return sendHtmlRedirect(`${FRONTEND_URL}/login?error=admin_pending_approval`);
+
+      if (dbUser.approval_status !== 'approved') {
+        return sendHtmlRedirect(`${FRONTEND_URL}/login?error=pending_approval`);
       }
 
       const accessToken = generateToken(dbUser);
@@ -339,11 +317,13 @@ exports.googleCallback = async (req, res) => {
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
-      
+
       await db.query(
         'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-        [dbUser.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
+        [dbUser.id, refreshToken, expiresAt, req.headers['user-agent'] || 'google-oauth']
       );
+
+      await db.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [dbUser.id]);
 
       logger.info(`Google login successful: ${dbUser.email}`);
       return sendHtmlRedirect(`${FRONTEND_URL}/auth/google/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`);
@@ -351,7 +331,7 @@ exports.googleCallback = async (req, res) => {
 
     if (user.isNewUser) {
       logger.info(`New Google user - redirecting to registration: ${user.email}`);
-      
+
       const googleData = Buffer.from(JSON.stringify({
         email: user.email,
         fullName: user.fullName,
@@ -359,18 +339,18 @@ exports.googleCallback = async (req, res) => {
         profileImage: user.profileImage,
         isGoogleUser: true
       })).toString('base64');
-      
+
       return sendHtmlRedirect(`${FRONTEND_URL}/auth/google/role-select?googleData=${googleData}&requiresRegistration=true`);
     }
   } catch (error) {
     logger.error('Google callback error:', error);
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.send(`<html><body><script>window.location.href="${FRONTEND_URL}/login?error=google_auth_failed";</script></body></html>`);
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    sendHtmlRedirect(`${FRONTEND_URL}/login?error=google_auth_failed`);
   }
 };
 
 // ============================================
-// FORGOT PASSWORD - Send OTP
+// FORGOT PASSWORD
 // ============================================
 exports.forgotPassword = async (req, res, next) => {
   try {
@@ -380,14 +360,12 @@ exports.forgotPassword = async (req, res, next) => {
       throw new ApiError(400, 'Email is required.', 'MISSING_EMAIL');
     }
 
-    // Check if user exists and is verified
     const [users] = await db.query(
       'SELECT id, email, full_name, is_verified FROM users WHERE email = ? AND is_deleted = 0',
       [email]
     );
 
     if (users.length === 0) {
-      // Don't reveal if email exists - security best practice
       return sendResponse(res, 200, {}, 'If an account exists with this email, a password reset OTP has been sent.');
     }
 
@@ -397,16 +375,13 @@ exports.forgotPassword = async (req, res, next) => {
       throw new ApiError(403, 'Please verify your email before resetting password.', 'EMAIL_UNVERIFIED');
     }
 
-    // Create and send OTP
     const otp = await createPasswordResetOTP(email);
-    
-    // Send email with OTP
     await sendOTPEmail(email, otp, 'password_reset');
 
     logger.info(`Password reset OTP sent to: ${email}`);
-    sendResponse(res, 200, { 
+    sendResponse(res, 200, {
       email,
-      otpSent: true 
+      otpSent: true
     }, 'Password reset OTP has been sent to your email.');
   } catch (error) {
     next(error);
@@ -430,19 +405,17 @@ exports.verifyResetOTP = async (req, res, next) => {
       throw new ApiError(400, result.message, 'INVALID_OTP');
     }
 
-    // Generate a temporary token for password reset
     const resetToken = crypto.randomBytes(32).toString('hex');
-    
-    // Store in reset_token field
+
     await db.query(
       'UPDATE users SET reset_token = ?, reset_token_expiry = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE email = ?',
       [resetToken, email]
     );
 
     logger.info(`Password reset OTP verified: ${email}`);
-    sendResponse(res, 200, { 
+    sendResponse(res, 200, {
       resetToken,
-      email 
+      email
     }, 'OTP verified. You can now reset your password.');
   } catch (error) {
     next(error);
@@ -460,9 +433,8 @@ exports.resetPassword = async (req, res, next) => {
       throw new ApiError(400, 'Reset token and new password are required.', 'MISSING_FIELDS');
     }
 
-    // Validate password strength
-    if (newPassword.length < 6) {
-      throw new ApiError(400, 'Password must be at least 6 characters long.', 'WEAK_PASSWORD');
+    if (newPassword.length < 8) {
+      throw new ApiError(400, 'Password must be at least 8 characters long.', 'WEAK_PASSWORD');
     }
 
     const [users] = await db.query(
@@ -474,13 +446,15 @@ exports.resetPassword = async (req, res, next) => {
       throw new ApiError(400, 'Invalid or expired reset token. Please request a new OTP.', 'INVALID_TOKEN');
     }
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
     await db.query(
       'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
       [passwordHash, users[0].id]
     );
+
+    await db.query('DELETE FROM refresh_tokens WHERE user_id = ?', [users[0].id]);
 
     logger.info(`Password reset successful for user: ${users[0].id}`);
     sendResponse(res, 200, {}, 'Password reset successful! You can now login with your new password.');
@@ -494,6 +468,10 @@ exports.resetPassword = async (req, res, next) => {
 // ============================================
 exports.getPendingAdminRequests = async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      throw new ApiError(403, 'Admin access required.', 'INSUFFICIENT_PERMISSIONS');
+    }
+
     const [requests] = await db.query(
       `SELECT r.*, u.created_at as user_created_at
        FROM admin_approval_requests r
@@ -510,10 +488,13 @@ exports.getPendingAdminRequests = async (req, res, next) => {
 
 exports.approveAdminRequest = async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      throw new ApiError(403, 'Admin access required.', 'INSUFFICIENT_PERMISSIONS');
+    }
+
     const { requestId } = req.params;
     const adminId = req.user.id;
 
-    // Get request details
     const [requests] = await db.query(
       'SELECT * FROM admin_approval_requests WHERE id = ?',
       [requestId]
@@ -525,19 +506,16 @@ exports.approveAdminRequest = async (req, res, next) => {
 
     const request = requests[0];
 
-    // Update user to approved
     await db.query(
-      'UPDATE users SET is_approved = 1 WHERE id = ?',
-      [request.user_id]
+      'UPDATE users SET approval_status = ? WHERE id = ?',
+      ['approved', request.user_id]
     );
 
-    // Update admin record
     await db.query(
       'UPDATE admins SET admin_level = ? WHERE user_id = ?',
       ['regular', request.user_id]
     );
 
-    // Update request status
     await db.query(
       'UPDATE admin_approval_requests SET status = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ?',
       ['approved', adminId, requestId]
@@ -552,6 +530,10 @@ exports.approveAdminRequest = async (req, res, next) => {
 
 exports.rejectAdminRequest = async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      throw new ApiError(403, 'Admin access required.', 'INSUFFICIENT_PERMISSIONS');
+    }
+
     const { requestId } = req.params;
     const { reason } = req.body;
     const adminId = req.user.id;
@@ -567,16 +549,14 @@ exports.rejectAdminRequest = async (req, res, next) => {
 
     const request = requests[0];
 
-    // Update request status
     await db.query(
       'UPDATE admin_approval_requests SET status = ?, reviewed_at = NOW(), reviewed_by = ?, rejection_reason = ? WHERE id = ?',
       ['rejected', adminId, reason || 'No reason provided', requestId]
     );
 
-    // Optionally deactivate the user
     await db.query(
-      'UPDATE users SET status = ? WHERE id = ?',
-      ['suspended', request.user_id]
+      'UPDATE users SET approval_status = ?, rejection_reason = ? WHERE id = ?',
+      ['rejected', reason || 'Admin request rejected', request.user_id]
     );
 
     logger.info(`Admin request rejected: ${request.email} by admin ${adminId}`);
@@ -597,32 +577,31 @@ exports.completeGoogleRegistration = async (req, res, next) => {
       throw new ApiError(400, 'Missing required fields.', 'MISSING_FIELDS');
     }
 
-    // Check if user already exists
+    const validRoles = ['student', 'teacher', 'parent', 'admin'];
+    if (!validRoles.includes(role)) {
+      throw new ApiError(400, 'Invalid role specified.', 'INVALID_ROLE');
+    }
+
     const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
       throw new ApiError(400, 'Email is already registered. Please login instead.', 'EMAIL_EXISTS');
     }
 
-    // Check if predefined admin
-    let isApproved = 1;
+    let approvalStatus = 'pending';
     if (role === 'admin') {
-      if (isPredefinedAdmin(email)) {
-        isApproved = 1;
-      } else {
-        isApproved = 0;
-      }
+      approvalStatus = isPredefinedAdmin(email) ? 'approved' : 'pending';
+    } else if (role === 'student') {
+      approvalStatus = 'approved';
     }
 
-    // Create user
     const [userResult] = await db.query(
-      `INSERT INTO users (full_name, email, google_id, profile_image, role, is_verified, is_approved, password_hash)
+      `INSERT INTO users (full_name, email, google_id, profile_image, role, is_verified, approval_status, password_hash)
        VALUES (?, ?, ?, ?, ?, 1, ?, 'google_oauth')`,
-      [fullName, email, googleId, profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`, role, isApproved]
+      [fullName, email, googleId, profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`, role, approvalStatus]
     );
 
     const userId = userResult.insertId;
 
-    // Role-specific data
     if (role === 'student') {
       await db.query(
         `INSERT INTO students (user_id, student_id, enrollment_year, level)
@@ -635,6 +614,10 @@ exports.completeGoogleRegistration = async (req, res, next) => {
          VALUES (?, ?, 0)`,
         [userId, `TEA${userId}`]
       );
+      await db.query(
+        'INSERT INTO teacher_verification_documents (user_id) VALUES (?)',
+        [userId]
+      );
     } else if (role === 'parent') {
       await db.query(
         `INSERT INTO parents (user_id, parent_id)
@@ -645,9 +628,9 @@ exports.completeGoogleRegistration = async (req, res, next) => {
       await db.query(
         `INSERT INTO admins (user_id, admin_level, permissions)
          VALUES (?, ?, ?)`,
-        [userId, isApproved ? 'super' : 'pending', JSON.stringify({})]
+        [userId, isPredefinedAdmin(email) ? 'super' : 'regular', JSON.stringify({})]
       );
-      
+
       if (!isPredefinedAdmin(email)) {
         await db.query(
           `INSERT INTO admin_approval_requests (user_id, email, full_name, status)
@@ -663,29 +646,26 @@ exports.completeGoogleRegistration = async (req, res, next) => {
       [userId, JSON.stringify({}), JSON.stringify({})]
     );
 
-    // Get created user
     const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
     const user = users[0];
 
-    // If admin not approved, return message instead of tokens
-    if (role === 'admin' && !isApproved) {
+    if (approvalStatus !== 'approved') {
       return sendResponse(res, 201, {
         user: { id: user.id, name: user.full_name, email: user.email, role: user.role },
-        isApproved: false,
-        message: 'Registration successful! Your admin account is pending approval.'
-      }, 'Registration successful! Your admin account is pending approval from an existing admin.');
+        approvalStatus,
+        message: 'Registration successful! Your account is pending approval.'
+      }, 'Registration successful! Your account is pending approval.');
     }
 
-    // Generate tokens
     const accessToken = generateToken(user);
     const refreshToken = generateRefreshToken(user);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    
+
     await db.query(
       'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
-      [userId, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']
+      [userId, refreshToken, expiresAt, req.headers['user-agent'] || 'google-oauth']
     );
 
     logger.info(`Google registration completed: ${email}, role: ${role}`);
@@ -693,7 +673,7 @@ exports.completeGoogleRegistration = async (req, res, next) => {
       user: { id: user.id, name: user.full_name, email: user.email, role: user.role, profileImage: user.profile_image },
       accessToken,
       refreshToken,
-      isApproved: true
+      approvalStatus
     }, 'Registration completed successfully!');
   } catch (error) {
     next(error);
@@ -701,7 +681,7 @@ exports.completeGoogleRegistration = async (req, res, next) => {
 };
 
 // ============================================
-// OTHER FUNCTIONS (UNCHANGED)
+// TOKEN REFRESH
 // ============================================
 exports.refreshToken = async (req, res, next) => {
   try {
@@ -717,8 +697,14 @@ exports.refreshToken = async (req, res, next) => {
       throw new ApiError(401, 'Invalid or expired refresh token.', 'INVALID_REFRESH_TOKEN');
     }
 
-    const [users] = await db.query('SELECT * FROM users WHERE id = ?', [storedToken[0].user_id]);
-    if (users.length === 0) throw new ApiError(401, 'User no longer exists.', 'USER_NOT_FOUND');
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE id = ? AND is_deleted = 0 AND status = ? AND approval_status = ?',
+      [storedToken[0].user_id, 'active', 'approved']
+    );
+    if (users.length === 0) {
+      await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      throw new ApiError(401, 'User account is no longer active or approved.', 'USER_NOT_ACTIVE');
+    }
 
     const newAccessToken = generateToken(users[0]);
     sendResponse(res, 200, { accessToken: newAccessToken });
@@ -727,6 +713,9 @@ exports.refreshToken = async (req, res, next) => {
   }
 };
 
+// ============================================
+// LOGOUT
+// ============================================
 exports.logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
@@ -748,16 +737,19 @@ exports.logoutAll = async (req, res, next) => {
   }
 };
 
+// ============================================
+// OTP
+// ============================================
 exports.sendOTP = async (req, res, next) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       throw new ApiError(400, 'Email is required.', 'MISSING_EMAIL');
     }
 
     const [users] = await db.query('SELECT id, is_verified FROM users WHERE email = ?', [email]);
-    
+
     if (users.length === 0) {
       throw new ApiError(404, 'User not found.', 'USER_NOT_FOUND');
     }
@@ -785,7 +777,7 @@ exports.verifyOTP = async (req, res, next) => {
     }
 
     const result = await verifyOTPService(email, otp);
-    
+
     if (!result.valid) {
       throw new ApiError(400, result.message, 'INVALID_OTP');
     }
@@ -795,13 +787,12 @@ exports.verifyOTP = async (req, res, next) => {
     const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = users[0];
 
-    // If admin not approved, return without tokens
-    if (user.role === 'admin' && user.is_approved === 0) {
+    if (user.approval_status !== 'approved') {
       return sendResponse(res, 200, {
         user: { id: user.id, name: user.full_name, email: user.email, role: user.role },
-        isApproved: false,
-        message: 'Email verified! Your admin account is pending approval.'
-      }, 'Email verified! Your admin account is pending approval.');
+        approvalStatus: user.approval_status,
+        message: 'Email verified! Your account is pending approval.'
+      }, 'Email verified! Your account is pending approval.');
     }
 
     const accessToken = generateToken(user);
@@ -809,7 +800,7 @@ exports.verifyOTP = async (req, res, next) => {
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    
+
     await db.query(
       'INSERT INTO refresh_tokens (user_id, token, expires_at, device_info) VALUES (?, ?, ?, ?)',
       [user.id, refreshToken, expiresAt, req.headers['user-agent'] || 'unknown']

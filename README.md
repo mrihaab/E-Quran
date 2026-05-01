@@ -1,79 +1,181 @@
-# E-Quran Academy LMS 
+# E-Quran Academy LMS
 
-This document tracks the current architecture, functional features, and remaining tasks for the E-Quran Academy platform, turning it into a production-grade multi-role application.
-
----
-
-## 🛠️ Tech Stack Architecture
-- **Frontend**: React.js + TypeScript (Vite Server explicitly on port 3000)
-- **State Management**: Redux Toolkit + Redux Persist (saves user sessions across reloads)
-- **Styling**: Tailwind CSS + Lucide Icons + Recharts
-- **Backend**: Node.js + Express.js 
-- **Database**: MySQL (XAMPP locally)
-- **Authentication**: Custom JWT (Access/Refresh strategy) + Google OAuth + Email OTPs
+A production-grade multi-role Learning Management System for online Quran education, featuring student, teacher, parent, and admin portals.
 
 ---
 
-## ✅ What Is Working Till Now
+## Tech Stack
 
-### 1. Authentication & Security
-- **Email/Password Flow**: Fully functional with BCrypt password hashing.
-- **Google OAuth**: Fully functioning. Google logins cleanly route through your backend and safely inject JWT tokens into your frontend, bypassing Chrome iframe restrictions.
-- **OTP Verifications**: Nodemailer is connected for Email Verification and Forgot Password flows.
-- **Token Persistence**: The application issues both Access Tokens (15m) and Refresh Tokens (7d). If you reload the page, you stay logged in.
-- **Route Protection (`ProtectedRoute.tsx`)**: Unauthenticated users are kicked out to the role selection terminal.
-
-### 2. Database Integration
-- A massive, relational SQL schema (`equran_academy`) has been established.
-- Dynamic data queries exist in the Backend (`dashboard.js`, `adminController.js`, `messageController.js`) grabbing LIVE data rather than generic text.
-
-### 3. Messaging Engine
-- You can fetch conversations, fetch particular messages with a partner, and securely store chat history.
-
-### 4. Dashboards Structure
-- **Admin, Teacher, Student, and Parent** portals physically exist with highly polished UI components, Sidebar navigation, and Dashboard Headers.
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS 4, Redux Toolkit + Persist |
+| **Backend** | Node.js, Express 4, Socket.IO (real-time messaging) |
+| **Database** | MySQL (mysql2 with connection pooling) |
+| **Auth** | JWT (access/refresh tokens), Google OAuth 2.0, Email OTP verification |
+| **Payments** | Stripe integration (JazzCash/EasyPaisa planned) |
+| **Docs** | Swagger UI at `/api-docs` |
 
 ---
 
-## 🚧 What You Need To Complete Yet (The Roadmap)
+## Project Structure
 
-Based on your production specification, here is EXACTLY what is missing and needs to be built next:
-
-### 1. The Strict Admin Verification Workflow
-Right now, users can get into the application slightly too easily. We need to lock this down:
-- **`approvalMiddleware`**: A backend blocker that checks `is_approved`. If `0`, it completely blocks backend API requests even if the user has a valid JWT token.
-- **Admin Action Panel**: The Admin Dashboard needs explicit UI buttons to "Approve" or "Reject" Teacher registrations.
-- **Matching Tool**: Admin alone must have a tool to "Link Parent A to Student B" and "Assign Student B to Teacher C".
-
-### 2. Form Document Uploads (Multer)
-When a Teacher registers, your spec requires them to upload formal documents:
-- **CNIC / ID Card**
-- **Teaching Certificates & Resume**
-- **Profile Photo**
-*Implementation Requirement*: You need to add a library called `multer` to the backend to securely receive `multipart/form-data` files, output them into a `Backend/uploads` folder, and save their file paths to the database.
-
-### 3. Database Missing Links
-- Add a new explicit table: `parent_student_links(parent_id, student_id, relation_type)`.
-- Update the `students` table to take `guardian_contact` and `desired_course`.
-- Update the `teachers` table to hold the URL pathways to the uploaded CNIC/Resume records.
-
-### 4. Complete Purge of Mock Data
-- The backend `dashboard.js` endpoints are currently sending mixed data (some real DB stats, some mock fallbacks).
-- The frontend `Dashboard.tsx` uses hardcoded `{ name: 'Tajweed', value: 75 }` inside the `ProgressLineChart` and `ComparisonBarChart`.
-*Action*: Strip all hardcoded data. Recharts MUST pull its arrays dynamically from the Redux store or React state populated by your API response.
-
-### 5. Independent Landing Pages
-- Right now, your main entry is largely a `/role-selection` system. 
-- You need completely separate, beautiful promotional Landing Pages for:
-  - `Teacher Landing Page`
-  - `Student Landing Page`
-  - `Parent Landing Page`
-- Each must contain Testimonials, FAQ, Course Benefits, etc., before routing into the specific registration form.
+```
+equran-academy/
+  Frontend/           # React SPA (Vite dev on port 3000)
+    src/
+      api/            # Centralized API client with token refresh
+      components/     # Reusable UI components
+      contexts/       # Toast notifications context
+      hooks/          # Custom hooks (Socket.IO)
+      pages/          # Route-level page components
+      store/          # Redux store + auth slice
+  Backend/            # Express REST API (port 5000)
+    config/           # DB, Passport, Swagger configuration
+    controllers/      # Route handlers
+    middleware/       # Auth, error handling, file upload
+    routes/           # Express route definitions
+    services/         # Email, OTP, notification services
+    utils/            # Logger, pagination, response handler
+    migrations/       # SQL migration scripts
+    db_setup.sql      # Unified database schema
+```
 
 ---
 
-## 💡 How To Proceed
-To build these final components without "hacking" the framework, we should tackle them one feature at a time:
-1. **First:** Complete the File Upload capability in the backend (`multer`) so Teachers can actually submit their paperwork.
-2. **Second:** Update the Admin Dashboard to give Admin the power to review those documents and approve them.
-3. **Third:** Link the real charts to the newly verified data.
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- MySQL 8.0+ (or XAMPP)
+- npm or yarn
+
+### 1. Clone and Install
+
+```bash
+git clone <repository-url>
+cd equran-academy
+npm run install:all
+```
+
+### 2. Database Setup
+
+1. Create the database by running the unified schema:
+```bash
+mysql -u root -p < Backend/db_setup.sql
+```
+
+2. If upgrading from an older version, also run the migration:
+```bash
+mysql -u root -p < Backend/migrations/001_strict_role_approval_system.sql
+```
+
+### 3. Environment Configuration
+
+**Backend** - Copy and configure:
+```bash
+cp Backend/.env.example Backend/.env
+```
+
+Required environment variables:
+- `JWT_SECRET` - Strong random string (32+ characters)
+- `JWT_REFRESH_SECRET` - Strong random string (32+ characters)
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - MySQL credentials
+- `SMTP_USER`, `SMTP_PASS` - Email service credentials
+- `ADMIN_EMAILS` - Comma-separated list of auto-approved admin emails
+
+Optional:
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` - For Google OAuth
+- `STRIPE_SECRET_KEY` - For payment processing
+
+**Frontend** - Copy and configure:
+```bash
+cp Frontend/.env.example Frontend/.env.local
+```
+
+### 4. Run Development Servers
+
+```bash
+# Terminal 1: Backend
+npm run backend:dev
+
+# Terminal 2: Frontend
+npm run frontend:dev
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
+- API Docs: http://localhost:5000/api-docs
+
+### Default Login (from seed data)
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@equran.com | admin123 |
+| Teacher | ahmed.teacher@equran.com | admin123 |
+| Student | student@equran.com | admin123 |
+| Parent | parent@equran.com | admin123 |
+
+---
+
+## Features
+
+### Authentication System
+- JWT access tokens (15 min) with refresh tokens (7 days)
+- Global approval enforcement - unapproved users cannot access any protected route
+- Google OAuth with role selection for new users
+- Email OTP verification on registration
+- Password reset via OTP
+- Rate limiting on auth endpoints
+- Login audit logging
+
+### Role-Based Access
+- **Students**: Browse/enroll in classes, messaging, progress tracking, payment
+- **Teachers**: Manage classes, course content, messaging, receive payments, document upload for verification
+- **Parents**: Monitor child's progress, messaging, payment management, invitation-based activation
+- **Admins**: User management, teacher approval workflow, analytics, reports, contact messages
+
+### Security
+- Helmet.js security headers with CSP in production
+- bcrypt password hashing (12 rounds)
+- Rate limiting (auth, OTP endpoints)
+- Input validation on all endpoints
+- Soft-delete across all entities
+- Session-based OAuth state management
+
+### Real-Time
+- Socket.IO for live notifications
+- Real-time typing indicators in messaging
+
+---
+
+## API Endpoints
+
+All API routes are prefixed with `/api`. Key route groups:
+
+| Route | Purpose |
+|-------|---------|
+| `/api/auth/*` | Registration, login, OTP, password reset, Google OAuth |
+| `/api/strict-auth/*` | Role-specific portal logins with approval checks |
+| `/api/users/*` | User profile management |
+| `/api/classes/*` | Class CRUD operations |
+| `/api/enrollments/*` | Student enrollment management |
+| `/api/messages/*` | Messaging system |
+| `/api/payments/*` | Payment processing (Stripe) |
+| `/api/admin/*` | Admin user management, stats |
+| `/api/admin/approval/*` | Teacher approval workflow |
+| `/api/dashboard/*` | Role-specific dashboard data |
+| `/api/notifications/*` | Notification management |
+| `/api/reviews/*` | Teacher reviews |
+| `/api/courses/*` | Course content (modules/lessons) |
+| `/api/contact/*` | Contact form + admin management |
+| `/api/teacher/documents/*` | Teacher verification documents |
+| `/api/parent/invitations/*` | Parent invitation system |
+
+Full documentation available at `/api-docs` when the backend is running.
+
+---
+
+## License
+
+Private - All rights reserved.
