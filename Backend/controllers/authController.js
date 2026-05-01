@@ -7,22 +7,7 @@ const { createOTP, verifyOTP: verifyOTPService } = require('../services/otpServi
 const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
 const logger = require('../utils/logger');
-
-// ============================================
-// PREDEFINED ADMIN EMAILS - Direct Admin Access
-// ============================================
-const PREDEFINED_ADMIN_EMAILS = [
-  'orhanuppal@gmail.com',
-  'mrihaab6@gmail.com',
-  'm.bilalirshad469@gmail.com'
-];
-
-/**
- * Check if email is a predefined admin
- */
-const isPredefinedAdmin = (email) => {
-  return PREDEFINED_ADMIN_EMAILS.includes(email.toLowerCase().trim());
-};
+const { isPredefinedAdmin } = require('../config/authConfig');
 
 /**
  * Create password reset OTP
@@ -224,8 +209,7 @@ exports.login = async (req, res, next) => {
 
     const user = users[0];
     
-    // DEBUG: Log user role
-    console.log(`[LOGIN DEBUG] User: ${user.email}, Role from DB: ${user.role}`);
+    logger.debug(`Login attempt for ${user.email} with role ${user.role}`);
 
     // Check if account is active
     if (user.status !== 'active') {

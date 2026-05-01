@@ -12,8 +12,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const logger = require('../utils/logger');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'equran-secret-key-change-in-production';
+const { JWT_SECRET } = require('../config/authConfig');
 
 /**
  * Log login attempt for security audit

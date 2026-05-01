@@ -107,7 +107,14 @@ app.use('/api/teacher/documents', require('./routes/teacherDocuments'));
 app.use('/api/parent/invitations', require('./routes/parentInvitations'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date(), version: '1.0.0' }));
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0'
+  });
+});
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -147,8 +154,12 @@ io.on('connection', (socket) => {
 });
 
 // ==================== START SERVER ====================
-server.listen(PORT, () => {
-  logger.info(`🚀 E-Quran Academy Backend running at http://localhost:${PORT}`);
-  logger.info(`📖 API Docs: http://localhost:${PORT}/api-docs`);
-  logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    logger.info(`E-Quran Academy Backend running at http://localhost:${PORT}`);
+    logger.info(`API Docs: http://localhost:${PORT}/api-docs`);
+    logger.info(`Frontend URL: ${process.env.FRONTEND_URL}`);
+  });
+}
+
+module.exports = { app, server, io };

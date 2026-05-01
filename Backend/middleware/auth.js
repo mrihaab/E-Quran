@@ -1,9 +1,6 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
-require('dotenv').config();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'equran-secret-key-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'equran-refresh-secret-key-change-in-production';
+const { JWT_SECRET, JWT_REFRESH_SECRET } = require('../config/authConfig');
 
 /**
  * Generate Access Token (Short-lived)

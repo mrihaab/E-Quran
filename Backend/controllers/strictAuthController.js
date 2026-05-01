@@ -15,6 +15,7 @@ const { sendResponse } = require('../utils/responseHandler');
 const { ApiError } = require('../middleware/errorMiddleware');
 const logger = require('../utils/logger');
 const { verifyRoleForPortal, logLoginAttempt, checkApprovalStatus } = require('../middleware/strictAuth');
+const { isPredefinedAdmin } = require('../config/authConfig');
 
 /**
  * Generic login function with strict role checking
@@ -267,8 +268,7 @@ exports.registerWithApproval = async (req, res, next) => {
     
     if (role === 'admin') {
       // Predefined admins are auto-approved
-      const PREDEFINED_ADMIN_EMAILS = ['orhanuppal@gmail.com', 'mrihaab6@gmail.com', 'm.bilalirshad469@gmail.com'];
-      if (PREDEFINED_ADMIN_EMAILS.includes(email.toLowerCase().trim())) {
+      if (isPredefinedAdmin(email)) {
         approvalStatus = 'approved';
         logger.info(`Auto-approved predefined admin: ${email}`);
       }
