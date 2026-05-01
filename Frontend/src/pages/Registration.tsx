@@ -197,7 +197,6 @@ export const RegisterStudent = ({ isEmbedded = false }: { isEmbedded?: boolean }
             name: data.user.name,
             email: data.user.email,
             role: data.user.role as UserRole,
-            token: data.accessToken,
             profileImage: data.user.profileImage,
           }));
           addToast('success', 'Welcome!', 'Your account has been verified.');
@@ -346,7 +345,6 @@ export const RegisterTeacher = ({ isEmbedded = false }: { isEmbedded?: boolean }
             name: data.user.name,
             email: data.user.email,
             role: data.user.role as UserRole,
-            token: data.accessToken,
             profileImage: data.user.profileImage,
           }));
           addToast('success', 'Welcome!', 'Your account has been verified.');
@@ -477,7 +475,6 @@ export const RegisterParent = ({ isEmbedded = false }: { isEmbedded?: boolean })
             name: data.user.name,
             email: data.user.email,
             role: data.user.role as UserRole,
-            token: data.accessToken,
             profileImage: data.user.profileImage,
           }));
           addToast('success', 'Welcome!', 'Your account has been verified.');
@@ -609,7 +606,6 @@ export const RegisterAdmin = ({ isEmbedded = false }: { isEmbedded?: boolean }) 
             name: data.user.name,
             email: data.user.email,
             role: data.user.role as UserRole,
-            token: data.accessToken,
             profileImage: data.user.profileImage,
           }));
           addToast('success', 'Welcome!', 'Your account has been verified.');
