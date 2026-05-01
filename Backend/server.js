@@ -13,17 +13,31 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Build the list of allowed CORS origins. FRONTEND_URL is the canonical
+// production origin; CORS_ORIGINS (comma-separated) is the escape hatch
+// for adding extras (staging, preview deploys, etc.). Localhost dev
+// origins are always allowed.
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      process.env.FRONTEND_URL,
+      ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : []),
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5000',
+    ]
+      .filter(Boolean)
+      .map((s) => s.trim())
+  )
+);
+
 const io = socketIo(server, {
   cors: {
-    origin: [
-      process.env.FRONTEND_URL || 'http://localhost:5173',
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:5000'
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
-    credentials: true
-  }
+    credentials: true,
+  },
 });
 
 const PORT = process.env.PORT || 5000;
@@ -34,19 +48,14 @@ app.set('io', io);
 // ==================== MIDDLEWARE ====================
 app.use(helmet({
   contentSecurityPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:5000'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -148,7 +157,22 @@ io.on('connection', (socket) => {
 
 // ==================== START SERVER ====================
 server.listen(PORT, () => {
-  logger.info(`🚀 E-Quran Academy Backend running at http://localhost:${PORT}`);
-  logger.info(`📖 API Docs: http://localhost:${PORT}/api-docs`);
-  logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
+  logger.info(`E-Quran Academy backend running at http://localhost:${PORT}`);
+  logger.info(`API docs:       http://localhost:${PORT}/api-docs`);
+  logger.info(`Frontend URL:   ${process.env.FRONTEND_URL || '(not set; CORS will use defaults)'}`);
 });
+
+// Graceful shutdown
+const shutdown = (signal) => {
+  logger.info(`${signal} received, shutting down…`);
+  server.close(() => {
+    logger.info('HTTP server closed.');
+    process.exit(0);
+  });
+  // Force-exit if shutdown hangs
+  setTimeout(() => process.exit(1), 10_000).unref();
+};
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => logger.error(`Unhandled rejection: ${reason}`));
+process.on('uncaughtException', (err) => logger.error(`Uncaught exception: ${err.stack || err}`));

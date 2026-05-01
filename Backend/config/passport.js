@@ -38,8 +38,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           const profileImage = profile.photos[0]?.value || null;
           // Get role from request (set by middleware in auth.js)
           const role = req.oauthRole || null;
-          console.log('=== GOOGLE OAUTH CALLBACK ===');
-          console.log('Extracted role from store:', role);
+          logger.debug(`Google OAuth callback for ${email} (role=${role || 'unset'})`);
 
           // Check if user exists with this Google ID
           let [users] = await db.query(

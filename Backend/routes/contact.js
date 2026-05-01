@@ -3,7 +3,8 @@ const router = express.Router();
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
 const contactController = require('../controllers/contactController');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 let transporter = null;
 
@@ -59,27 +60,27 @@ router.post('/', async (req, res) => {
 
         await db.query('UPDATE contact_messages SET email_sent = 1 WHERE id = ?', [result.insertId]);
       } catch (emailError) {
-        console.error('Email sending failed:', emailError.message);
+        logger.error(`Contact email sending failed: ${emailError.message}`);
       }
     }
 
     res.status(201).json({
       success: true,
-      message: '✓ Your message has been received! We will contact you soon.',
-      contactId: result.insertId
+      message: 'Your message has been received! We will contact you soon.',
+      data: { contactId: result.insertId },
     });
   } catch (error) {
-    console.error('Contact error:', error);
-    res.status(500).json({ error: 'Failed to submit contact form.' });
+    logger.error(`Contact submission error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Failed to submit contact form.' });
   }
 });
 
 // ==================== ADMIN CRUD FOR CONTACT MESSAGES ====================
-router.get('/admin/messages', verifyToken, contactController.getAllMessages);
-router.get('/admin/messages/stats', verifyToken, contactController.getMessageStats);
-router.get('/admin/messages/:id', verifyToken, contactController.getMessageById);
-router.put('/admin/messages/:id/status', verifyToken, contactController.updateMessageStatus);
-router.post('/admin/messages/:id/reply', verifyToken, contactController.replyToMessage);
-router.delete('/admin/messages/:id', verifyToken, contactController.deleteMessage);
+router.get('/admin/messages', verifyToken, requireRole('admin'), contactController.getAllMessages);
+router.get('/admin/messages/stats', verifyToken, requireRole('admin'), contactController.getMessageStats);
+router.get('/admin/messages/:id', verifyToken, requireRole('admin'), contactController.getMessageById);
+router.put('/admin/messages/:id/status', verifyToken, requireRole('admin'), contactController.updateMessageStatus);
+router.post('/admin/messages/:id/reply', verifyToken, requireRole('admin'), contactController.replyToMessage);
+router.delete('/admin/messages/:id', verifyToken, requireRole('admin'), contactController.deleteMessage);
 
 module.exports = router;

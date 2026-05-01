@@ -3,7 +3,7 @@ const router = express.Router();
 const passport = require('../config/passport');
 const authController = require('../controllers/authController');
 
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -100,9 +100,9 @@ router.post('/verify-reset-otp', authController.verifyResetOTP);
 router.post('/reset-password', authController.resetPassword);
 
 // ==================== ADMIN APPROVAL WORKFLOW ====================
-router.get('/admin/requests', verifyToken, authController.getPendingAdminRequests);
-router.post('/admin/requests/:requestId/approve', verifyToken, authController.approveAdminRequest);
-router.post('/admin/requests/:requestId/reject', verifyToken, authController.rejectAdminRequest);
+router.get('/admin/requests', verifyToken, requireRole('admin'), authController.getPendingAdminRequests);
+router.post('/admin/requests/:requestId/approve', verifyToken, requireRole('admin'), authController.approveAdminRequest);
+router.post('/admin/requests/:requestId/reject', verifyToken, requireRole('admin'), authController.rejectAdminRequest);
 
 // Simple in-memory store for role during OAuth (cleared periodically)
 const oauthRoleStore = new Map();
@@ -110,6 +110,8 @@ const oauthRoleStore = new Map();
 // ==================== GOOGLE OAUTH ====================
 // Only enable if Google OAuth is configured
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const logger = require('../utils/logger');
+
   // Initiate Google OAuth - capture role from query and store it
   router.get('/google',
     (req, res, next) => {
@@ -120,14 +122,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           const stateData = JSON.parse(decodeURIComponent(req.query.state));
           role = stateData.role || null;
         } catch (e) {
-          console.log('Failed to parse state:', req.query.state);
+          logger.warn(`OAuth: failed to parse state parameter: ${req.query.state}`);
         }
       }
       // Generate a state token and store role
       const stateToken = require('crypto').randomBytes(16).toString('hex');
       if (role) {
         oauthRoleStore.set(stateToken, { role, timestamp: Date.now() });
-        console.log('Stored role for OAuth:', role, 'state:', stateToken);
         // Clean old entries (older than 10 minutes)
         for (const [key, value] of oauthRoleStore) {
           if (Date.now() - value.timestamp > 10 * 60 * 1000) {
@@ -156,12 +157,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     (req, res, next) => {
       // Restore role from store using state returned by Google
       const state = req.query.state;
-      console.log('Callback received state:', state);
       if (state && oauthRoleStore.has(state)) {
         const data = oauthRoleStore.get(state);
         req.oauthRole = data.role;
         oauthRoleStore.delete(state);
-        console.log('Restored role from OAuth store:', data.role);
       }
       next();
     },
