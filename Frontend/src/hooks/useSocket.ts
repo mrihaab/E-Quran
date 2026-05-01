@@ -2,7 +2,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { getToken } from '../api';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const env = (import.meta as any).env || {};
+const SOCKET_URL: string =
+  env.VITE_BACKEND_URL ||
+  env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
@@ -11,24 +15,16 @@ export function useSocket() {
     const token = getToken();
     if (!token) return;
 
-    // Connect to Socket.io server with auth token
     const socket = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
     });
 
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
-    });
-
-    socket.on('connect_error', (error) => {
+    socket.on('connect_error', (error: Error) => {
+      // eslint-disable-next-line no-console
       console.error('Socket connection error:', error.message);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
     });
 
     return () => {
@@ -37,34 +33,21 @@ export function useSocket() {
     };
   }, []);
 
-  // Join user room for receiving personal messages
   const joinUserRoom = useCallback((userId: number) => {
-    if (socketRef.current) {
-      socketRef.current.emit('join', userId);
-    }
+    socketRef.current?.emit('join', userId);
   }, []);
 
-  // Listen for new messages
   const onNewMessage = useCallback((callback: (message: any) => void) => {
-    if (socketRef.current) {
-      socketRef.current.on('new_message', callback);
-    }
+    socketRef.current?.on('new_message', callback);
     return () => {
-      if (socketRef.current) {
-        socketRef.current.off('new_message', callback);
-      }
+      socketRef.current?.off('new_message', callback);
     };
   }, []);
 
-  // Listen for notifications
   const onNotification = useCallback((callback: (notification: any) => void) => {
-    if (socketRef.current) {
-      socketRef.current.on('notification', callback);
-    }
+    socketRef.current?.on('notification', callback);
     return () => {
-      if (socketRef.current) {
-        socketRef.current.off('notification', callback);
-      }
+      socketRef.current?.off('notification', callback);
     };
   }, []);
 
@@ -73,7 +56,7 @@ export function useSocket() {
     joinUserRoom,
     onNewMessage,
     onNotification,
-    connected: socketRef.current?.connected || false
+    connected: socketRef.current?.connected || false,
   };
 }
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { verifyToken } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 // ==================== GET SETTINGS ====================
 router.get('/:userId', verifyToken, async (req, res) => {
@@ -24,8 +25,8 @@ router.get('/:userId', verifyToken, async (req, res) => {
       teachingPreferences: s.teaching_preferences || null
     });
   } catch (error) {
-    console.error('Get settings error:', error);
-    res.status(500).json({ error: 'Failed to fetch settings.' });
+    logger.error(`Get settings error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Failed to fetch settings.' });
   }
 });
 
@@ -78,8 +79,8 @@ router.put('/:userId', verifyToken, async (req, res) => {
 
     res.json({ message: 'Settings updated successfully.' });
   } catch (error) {
-    console.error('Update settings error:', error);
-    res.status(500).json({ error: 'Failed to update settings.' });
+    logger.error(`Update settings error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Failed to update settings.' });
   }
 });
 

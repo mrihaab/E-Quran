@@ -299,7 +299,10 @@ export const StudentSettings = () => {
                         onSubmit={async (values, { resetForm, setSubmitting }) => {
                           try {
                             if (!user?.id) throw new Error('Not authenticated');
-                            await changePassword(user.id, values.currentPassword, values.newPassword);
+                            await changePassword(user.id, {
+                              currentPassword: values.currentPassword,
+                              newPassword: values.newPassword,
+                            });
                             addToast('success', 'Password Updated', 'Your password has been changed successfully.');
                             resetForm();
                           } catch (err: any) {
